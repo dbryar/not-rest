@@ -40,7 +40,7 @@ That's it. A human developer can read it. An agent can call it. The operation na
 
 ## Read More
 
-The full specification is in [`specification.md`](specification.md). For what this means on the client side — and why your REST SDK is apology code — see [`client.md`](client.md).
+The full specification is in [`specification.md`](specification.md). For what this means on the client side — and why your REST SDK is apology code — see [`client.md`](client.md). For how CALL compares to JSON-RPC, GraphQL, gRPC, SOAP, MCP, A2A, and others — see [`comparisons.md`](comparisons.md).
 
 ## Origin
 
