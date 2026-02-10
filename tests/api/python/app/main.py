@@ -112,6 +112,22 @@ async def well_known_ops(request: Request) -> Response:
     )
 
 
+@app.get("/call")
+async def get_call_not_allowed() -> JSONResponse:
+    return JSONResponse(
+        status_code=405,
+        content={
+            "requestId": str(uuid.uuid4()),
+            "state": "error",
+            "error": {
+                "code": "METHOD_NOT_ALLOWED",
+                "message": "Use POST /call to invoke operations. Discover available operations at GET /.well-known/ops",
+            },
+        },
+        headers={"Allow": "POST"},
+    )
+
+
 @app.post("/call")
 async def call_endpoint(request: Request) -> JSONResponse:
     content_type = request.headers.get("content-type", "")

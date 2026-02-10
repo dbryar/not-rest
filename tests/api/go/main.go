@@ -75,6 +75,19 @@ func main() {
 		c.Data(200, "application/json; charset=utf-8", registryJSON)
 	})
 
+	// GET /call -- method not allowed, point to POST /call and registry
+	r.GET("/call", func(c *gin.Context) {
+		c.Header("Allow", "POST")
+		c.JSON(405, gin.H{
+			"requestId": newUUID(),
+			"state":     "error",
+			"error": gin.H{
+				"code":    "METHOD_NOT_ALLOWED",
+				"message": "Use POST /call to invoke operations. Discover available operations at GET /.well-known/ops",
+			},
+		})
+	})
+
 	// POST /call -- operation invocation
 	r.POST("/call", func(c *gin.Context) {
 		contentType := c.GetHeader("Content-Type")

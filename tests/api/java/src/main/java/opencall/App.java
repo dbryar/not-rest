@@ -75,6 +75,20 @@ public class App {
                 .result(registryJson);
         });
 
+        // GET /call -- method not allowed, point to POST /call and registry
+        app.get("/call", ctx -> {
+            LinkedHashMap<String, Object> error = new LinkedHashMap<>();
+            error.put("code", "METHOD_NOT_ALLOWED");
+            error.put("message", "Use POST /call to invoke operations. Discover available operations at GET /.well-known/ops");
+            LinkedHashMap<String, Object> body = new LinkedHashMap<>();
+            body.put("requestId", UUID.randomUUID().toString());
+            body.put("state", "error");
+            body.put("error", error);
+            ctx.status(405)
+                .header("Allow", "POST")
+                .json(body);
+        });
+
         // POST /call -- operation invocation
         app.post("/call", ctx -> {
             String contentType = ctx.contentType() != null ? ctx.contentType() : "";

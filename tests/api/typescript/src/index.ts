@@ -82,6 +82,22 @@ export function createServer(port: number = 3000) {
         });
       }
 
+      // GET /call — method not allowed, point to POST /call and registry
+      if (req.method === "GET" && url.pathname === "/call") {
+        return Response.json(
+          {
+            requestId: crypto.randomUUID(),
+            state: "error",
+            error: {
+              code: "METHOD_NOT_ALLOWED",
+              message:
+                "Use POST /call to invoke operations. Discover available operations at GET /.well-known/ops",
+            },
+          },
+          { status: 405, headers: { Allow: "POST" } }
+        );
+      }
+
       // POST /call — operation invocation
       if (req.method === "POST" && url.pathname === "/call") {
         return (async () => {

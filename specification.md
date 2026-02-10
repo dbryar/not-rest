@@ -52,6 +52,10 @@ The system supports:
 POST /call
 ```
 
+#### GET /call
+
+Servers SHOULD respond to `GET /call` with `405 Method Not Allowed`, an `Allow: POST` header, and a JSON error body directing the caller to `POST /call` for invocation and `GET /.well-known/ops` for operation discovery.
+
 ### Operation Naming Convention
 
 Every operation name MUST be prefixed with a version: `v{N}:namespace.operation`.
@@ -289,6 +293,7 @@ The system MUST return a descriptive payload whenever possible.
 | 401 | Authentication invalid |
 | 403 | Authentication valid but insufficient |
 | 404 | Resource not found — the requested operation result, chunk, or media object does not exist or has expired |
+| 405 | Method not allowed — the HTTP method is not supported for the requested endpoint |
 | 410 | Operation removed — the operation existed but has been removed past its sunset date. The error payload includes `replacement` if a successor exists |
 | 500 | Internal failure with full error payload |
 | 502 | Upstream dependency failure |
