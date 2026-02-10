@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
-import { OPERATIONS, getIdempotencyStore } from "./operations";
+import { OPERATIONS, getIdempotencyStore, ServerError, type MediaFile } from "./operations";
+import { validateAuth } from "./auth";
 
 interface CallRequest {
   op: string;
@@ -15,12 +16,18 @@ interface CallRequest {
 interface CallResponse {
   requestId: string;
   sessionId?: string;
-  state: "complete" | "error";
+  state: "complete" | "error" | "accepted" | "streaming";
   result?: unknown;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; cause?: Record<string, unknown> };
+  retryAfterMs?: number;
+  stream?: { transport: string; location: string; sessionId: string; encoding: string };
 }
 
-export function handleCall(envelope: CallRequest): {
+export function handleCall(
+  envelope: CallRequest,
+  authHeader: string | null = null,
+  mediaFile?: MediaFile,
+): {
   status: number;
   body: CallResponse;
 } {
@@ -61,6 +68,46 @@ export function handleCall(envelope: CallRequest): {
     };
   }
 
+  // Deprecated check — past sunset date means 410
+  if (operation.deprecated && operation.sunset) {
+    const sunsetDate = new Date(operation.sunset);
+    if (new Date() > sunsetDate) {
+      return {
+        status: 410,
+        body: {
+          ...base,
+          state: "error",
+          error: {
+            code: "OP_REMOVED",
+            message: `Operation ${envelope.op} has been removed`,
+            cause: {
+              removedOp: envelope.op,
+              replacement: operation.replacement || null,
+            },
+          },
+        },
+      };
+    }
+  }
+
+  // Auth check
+  if (operation.authScopes.length > 0) {
+    const authResult = validateAuth(authHeader, operation.authScopes);
+    if (!authResult.valid) {
+      return {
+        status: authResult.status,
+        body: {
+          ...base,
+          state: "error",
+          error: {
+            code: authResult.code,
+            message: authResult.message,
+          },
+        },
+      };
+    }
+  }
+
   // Check idempotency store for side-effecting ops
   const idempotencyKey = envelope.ctx?.idempotencyKey;
   if (operation.sideEffecting && idempotencyKey) {
@@ -73,7 +120,51 @@ export function handleCall(envelope: CallRequest): {
 
   // Execute handler
   try {
-    const result = operation.handler(envelope.args || {});
+    // Stream operations
+    if (operation.executionModel === "stream" && operation.streamHandler) {
+      const streamResult = operation.streamHandler(envelope.args || {});
+      if (!streamResult.ok) {
+        return {
+          status: 200,
+          body: { ...base, state: "error", error: streamResult.error },
+        };
+      }
+      return {
+        status: 202,
+        body: {
+          ...base,
+          state: "streaming",
+          stream: {
+            transport: "wss",
+            location: `/streams/${streamResult.sessionId}`,
+            sessionId: streamResult.sessionId,
+            encoding: "json",
+          },
+        },
+      };
+    }
+
+    // Async operations
+    if (operation.executionModel === "async" && operation.asyncHandler) {
+      const asyncResult = operation.asyncHandler(envelope.args || {}, requestId);
+      if (!asyncResult.ok) {
+        return {
+          status: 200,
+          body: { ...base, state: "error", error: asyncResult.error },
+        };
+      }
+      return {
+        status: 202,
+        body: {
+          ...base,
+          state: "accepted",
+          retryAfterMs: 100,
+        },
+      };
+    }
+
+    // Sync operations
+    const result = operation.handler(envelope.args || {}, mediaFile);
 
     let response: { status: number; body: CallResponse };
 
@@ -105,9 +196,21 @@ export function handleCall(envelope: CallRequest): {
           state: "error",
           error: {
             code: "VALIDATION_ERROR",
-            message: err.errors
-              .map((e) => `${e.path.join(".")}: ${e.message}`)
-              .join("; "),
+            message: err.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join("; "),
+          },
+        },
+      };
+    }
+
+    if (err instanceof ServerError) {
+      return {
+        status: err.statusCode,
+        body: {
+          ...base,
+          state: "error",
+          error: {
+            code: err.code,
+            message: err.message,
           },
         },
       };

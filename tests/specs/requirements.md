@@ -5,7 +5,7 @@
 - **Context**: The OpenCALL specification defines a self-describing, operation-based API protocol. The repo contains only spec documents.
 - **Current State**: No working examples exist to prove the spec works.
 - **Problem Statement**: We need concrete, working example APIs with a language-agnostic test suite that validates any implementation against the OpenCALL contract.
-- **Scope**: A todo list API implemented in TypeScript (first), tested by a language-agnostic HTTP test suite. Does NOT cover auth, async execution, streaming, or media ingress.
+- **Scope**: A todo list API implemented in TypeScript and Python, tested by a language-agnostic HTTP test suite. Covers auth, async execution, streaming, media handling, chunked retrieval, deprecated operations, and schema evolution.
 - **Dependencies**: OpenCALL specification (`specification.md`)
 
 ## Glossary
@@ -32,7 +32,7 @@
 5. THE `argsSchema` and `resultSchema` SHALL be valid JSON Schema objects with `type: "object"` and `properties`
 6. THE registry SHALL include all six todo operations: `v1:todos.create`, `v1:todos.get`, `v1:todos.list`, `v1:todos.update`, `v1:todos.delete`, `v1:todos.complete`
 7. THE `v1:todos.create` `argsSchema` SHALL list `title` in its `required` array
-8. ALL operations SHALL declare `executionModel: "sync"`
+8. CRUD operations SHALL declare `executionModel: "sync"`, async operations SHALL declare `"async"`, and streaming operations SHALL declare `"stream"`
 9. THE response SHOULD include `Cache-Control` and `ETag` headers
 
 ### Requirement 2: Response Envelope (REQ-ENV)
@@ -102,3 +102,91 @@
 2. WHEN different idempotency keys are used, THE server SHALL create different todos
 3. WHEN no idempotency key is provided, THE server SHALL allow duplicate creation
 4. NON-side-effecting operations SHALL ignore `ctx.idempotencyKey`
+
+### Requirement 6: Auth (REQ-AUTH)
+
+**User Story:** As an API operator, I want to protect operations with scoped auth tokens, so that only authorized clients can perform sensitive operations.
+
+#### Acceptance Criteria
+
+1. WHEN an operation requires auth scopes and no Authorization header is provided, THE server SHALL return HTTP 401 with code `AUTH_REQUIRED`
+2. WHEN an invalid bearer token is provided, THE server SHALL return HTTP 401
+3. WHEN a token lacks required scopes, THE server SHALL return HTTP 403 with code `INSUFFICIENT_SCOPE`
+4. WHEN a valid token with correct scopes is provided, THE operation SHALL proceed normally
+5. Write operations SHALL require `todos:write` scope; read operations SHALL require `todos:read` scope
+6. THE registry SHALL declare `authScopes` for each operation
+
+### Requirement 7: Async Execution (REQ-ASYNC)
+
+**User Story:** As an API consumer, I want to invoke long-running operations that complete asynchronously, so that I can poll for results without blocking.
+
+#### Acceptance Criteria
+
+1. WHEN an async operation is invoked, THE server SHALL return HTTP 202 with `state=accepted` and `retryAfterMs`
+2. THE client SHALL poll `GET /ops/{requestId}` to check operation progress
+3. THE operation state SHALL transition from `accepted` through `pending` to `complete`
+4. WHEN complete, the poll response SHALL include `result` and no `error`
+5. WHEN polling a nonexistent requestId, THE server SHALL return HTTP 404
+6. Async operations SHALL declare `executionModel: "async"` in the registry
+
+### Requirement 8: Deprecated Operations (REQ-DEPR)
+
+**User Story:** As an API consumer, I want clear signals when an operation is deprecated, so that I can migrate to replacement operations.
+
+#### Acceptance Criteria
+
+1. Deprecated operations SHALL declare `deprecated: true`, a `sunset` date (YYYY-MM-DD), and a `replacement` operation name
+2. WHEN a deprecated operation past its sunset date is invoked, THE server SHALL return HTTP 410 with code `OP_REMOVED`
+3. THE 410 error SHALL include `cause` with `removedOp` and `replacement` fields
+
+### Requirement 9: Status Codes (REQ-STATUS)
+
+**User Story:** As an API consumer, I want consistent error payloads for all HTTP error status codes.
+
+#### Acceptance Criteria
+
+1. HTTP 500, 502, and 503 responses SHALL include `state=error` with `code` and `message`
+2. ALL error responses SHALL include `requestId`
+
+### Requirement 10: Schema Evolution (REQ-EVOL)
+
+**User Story:** As an API consumer, I want the API to evolve without breaking my client, following the robustness principle.
+
+#### Acceptance Criteria
+
+1. Clients SHALL successfully parse responses that contain extra unknown fields
+2. Known fields SHALL retain correct values regardless of schema additions
+
+### Requirement 11: Chunked Retrieval (REQ-CHUNK)
+
+**User Story:** As an API consumer, I want to retrieve large async operation results in chunks with integrity verification.
+
+#### Acceptance Criteria
+
+1. Completed async operations SHALL support `GET /ops/{requestId}/chunks` with cursor-based pagination
+2. Each chunk SHALL include `offset`, `data`, `checksum` (sha256:{hex}), `checksumPrevious`, `state`, and `cursor`
+3. THE SHA-256 of chunk data SHALL match the declared checksum
+4. THE `checksumPrevious` of each chunk SHALL match the `checksum` of the prior chunk (null for the first)
+
+### Requirement 12: Media Handling (REQ-MEDIA)
+
+**User Story:** As an API consumer, I want to upload files to todo items and retrieve them via content-addressed redirects.
+
+#### Acceptance Criteria
+
+1. `v1:todos.attach` SHALL accept multipart/form-data with `envelope` and `file` parts
+2. After attachment, `v1:todos.get` SHALL include a `location` object with `uri` pointing to `/media/{id}`
+3. `GET /media/{id}` SHALL return HTTP 303 with a `Location` header; following it SHALL return the binary data
+4. THE registry SHALL declare `mediaSchema` with `name`, `acceptedTypes`, and `maxBytes`
+5. Unsupported MIME types SHALL be rejected with an error
+
+### Requirement 13: Streaming (REQ-STREAM)
+
+**User Story:** As an API consumer, I want to receive real-time updates when todos change via WebSocket.
+
+#### Acceptance Criteria
+
+1. `v1:todos.watch` SHALL return HTTP 202 with `state=streaming` and a `stream` object containing `transport`, `location`, `sessionId`, and `encoding`
+2. Connecting to the `stream.location` via WebSocket SHALL succeed
+3. WHEN a todo is created or updated, THE WebSocket SHALL push a change event with the affected todo
+4. THE registry SHALL declare `executionModel: "stream"` and `supportedTransports: ["wss"]`

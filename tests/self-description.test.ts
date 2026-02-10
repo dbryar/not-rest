@@ -61,10 +61,13 @@ describe("Self-Description (REQ-SELF)", () => {
     expect(schema.required).toContain("title");
   });
 
-  test("all operations use sync execution model", async () => {
+  test("CRUD operations use sync execution model", async () => {
     const { body } = await getRegistry();
-    for (const op of body.operations) {
-      expect(op.executionModel).toBe("sync");
+    const crudOps = ["v1:todos.create", "v1:todos.get", "v1:todos.list", "v1:todos.update", "v1:todos.delete", "v1:todos.complete"];
+    for (const opName of crudOps) {
+      const op = body.operations.find((o) => o.op === opName);
+      expect(op).toBeDefined();
+      expect(op!.executionModel).toBe("sync");
     }
   });
 
@@ -72,5 +75,42 @@ describe("Self-Description (REQ-SELF)", () => {
     const { headers } = await getRegistry();
     expect(headers.get("cache-control")).toBeTruthy();
     expect(headers.get("etag")).toBeTruthy();
+  });
+
+  test("async operations declare executionModel async", async () => {
+    const { body } = await getRegistry();
+    const asyncOps = ["v1:todos.export", "v1:reports.generate"];
+    for (const opName of asyncOps) {
+      const op = body.operations.find((o) => o.op === opName);
+      expect(op).toBeDefined();
+      expect(op!.executionModel).toBe("async");
+    }
+  });
+
+  test("streaming operations declare executionModel stream", async () => {
+    const { body } = await getRegistry();
+    const watch = body.operations.find((o) => o.op === "v1:todos.watch");
+    expect(watch).toBeDefined();
+    expect(watch!.executionModel).toBe("stream");
+  });
+
+  test("deprecated operations include deprecated, sunset, and replacement", async () => {
+    const { body } = await getRegistry();
+    const search = body.operations.find((o) => o.op === "v1:todos.search");
+    expect(search).toBeDefined();
+    expect(search!.deprecated).toBe(true);
+    expect(search!.sunset).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(search!.replacement).toBeTruthy();
+  });
+
+  test("media-accepting operations declare mediaSchema", async () => {
+    const { body } = await getRegistry();
+    const attach = body.operations.find((o) => o.op === "v1:todos.attach");
+    expect(attach).toBeDefined();
+    const ms = attach!.mediaSchema as Record<string, unknown>;
+    expect(ms).toBeDefined();
+    expect(ms.name).toBeTruthy();
+    expect(ms.acceptedTypes).toBeInstanceOf(Array);
+    expect(ms.maxBytes).toBeGreaterThan(0);
   });
 });

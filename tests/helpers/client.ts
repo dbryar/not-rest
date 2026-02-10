@@ -3,15 +3,22 @@ export const API_URL = process.env.API_URL || "http://localhost:3000"
 export interface CallResponse {
   requestId: string
   sessionId?: string
-  state: "complete" | "error"
+  state: "complete" | "error" | "accepted" | "pending" | "streaming"
   result?: unknown
-  error?: { code: string; message: string }
+  error?: { code: string; message: string; cause?: Record<string, unknown> }
+  location?: { uri: string; method?: string; headers?: Record<string, string> }
+  stream?: { transport: string; location: string; sessionId: string; encoding?: string }
+  retryAfterMs?: number
 }
 
 export async function call(op: string, args: Record<string, unknown> = {}, ctx: Record<string, unknown> = {}): Promise<{ status: number; body: CallResponse }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (process.env.AUTH_TOKEN) {
+    headers["Authorization"] = `Bearer ${process.env.AUTH_TOKEN}`
+  }
   const res = await fetch(`${API_URL}/call`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ op, args, ctx }),
   })
   const body = await res.json()
@@ -29,6 +36,14 @@ export interface RegistryResponse {
     executionModel: string
     description?: string
     authScopes?: string[]
+    deprecated?: boolean
+    sunset?: string
+    replacement?: string
+    mediaSchema?: Record<string, unknown>
+    supportedTransports?: string[]
+    supportedEncodings?: string[]
+    frameSchema?: Record<string, unknown>
+    ttlSeconds?: number
   }>
 }
 
