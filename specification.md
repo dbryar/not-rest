@@ -60,6 +60,14 @@ POST /invoke
 {
   "op": "string",
   "args": { },
+  "media": [
+    {
+      "name": "string",
+      "mimeType": "string",
+      "ref": "string (URI, optional)",
+      "part": "string (multipart part name, optional)"
+    }
+  ],
   "ctx": {
     "requestId": "uuid",
     "sessionId": "uuid (optional)",
@@ -85,6 +93,14 @@ POST /invoke
 
 - `args`
   Operation-specific payload. Validated against the operation schema.
+
+- `media`
+  Optional array of media attachments accompanying the invocation. Each entry describes one file or binary object. See [Media Ingress](#media-ingress) for full semantics.
+
+  - `media[].name` — Logical name for the attachment (e.g. `"selfie"`, `"bankStatement"`). Must match a name declared in the operation's `mediaSchema`.
+  - `media[].mimeType` — MIME type of the attachment (e.g. `"image/jpeg"`, `"application/pdf"`).
+  - `media[].ref` — URI of a pre-uploaded object. Used for large files. Mutually exclusive with `part`.
+  - `media[].part` — Multipart part name where the binary data is attached. Used for inline uploads via `multipart/form-data`. Mutually exclusive with `ref`.
 
 - `ctx.requestId`
   Client-supplied or generated correlation ID.
@@ -343,6 +359,117 @@ The API MUST NOT proxy or re-stream large media objects (audio/video).
 
 ---
 
+## Media Ingress
+
+Operations that accept binary attachments (images, documents, audio, video) use the `media` array on the request envelope.
+
+### Two Delivery Modes
+
+**Inline (multipart)** — The binary is sent as a part in a `multipart/form-data` request. The `media` entry references it by `part` name. The envelope JSON is sent as a part named `envelope`. This is the browser-native path — a standard `<form>` or `fetch` with `FormData` can construct it without any framework.
+
+**Reference (pre-uploaded)** — The binary is uploaded to an external object store beforehand (e.g. via a pre-signed URL). The `media` entry references it by `ref` URI. The invoke request is plain JSON. This is the natural path for agents and programmatic callers — no multipart overhead, just a clean JSON envelope.
+
+Each `media` entry uses exactly one of `part` or `ref`, never both.
+
+### Audience Guidance
+
+The two delivery modes map naturally to the two audiences:
+
+- **Browsers and human-facing UIs** use **inline multipart**. Native `FormData`, native `<form>`, zero framework dependencies.
+- **Agents and programmatic callers** use **references**. Plain JSON, no multipart construction, no boundary handling. The agent uploads the file first (via a pre-signed URL or an upload operation), then sends a clean invoke with `ref` URIs.
+
+Both paths produce the same `media` array on the envelope. The server handles them identically.
+
+### Example: Identity Verification
+
+A user submits a selfie, a bank statement PDF, and structured form data in a single invocation:
+
+```
+POST /invoke HTTP/1.1
+Host: api.example.com
+Authorization: Bearer eyJ...
+Content-Type: multipart/form-data; boundary=----boundary
+
+------boundary
+Content-Disposition: form-data; name="envelope"
+Content-Type: application/json
+
+{
+  "op": "identity.verify",
+  "args": {
+    "fullName": "Jane Smith",
+    "dateOfBirth": "1990-05-15",
+    "address": "123 Main St, Sydney NSW 2000"
+  },
+  "media": [
+    { "name": "selfie", "mimeType": "image/jpeg", "part": "selfie" },
+    { "name": "bankStatement", "mimeType": "application/pdf", "part": "bankStatement" }
+  ],
+  "ctx": {
+    "requestId": "550e8400-e29b-41d4-a716-446655440000",
+    "idempotencyKey": "verify-jane-2026-02-10"
+  }
+}
+------boundary
+Content-Disposition: form-data; name="selfie"; filename="selfie.jpg"
+Content-Type: image/jpeg
+
+<binary JPEG data>
+------boundary
+Content-Disposition: form-data; name="bankStatement"; filename="statement.pdf"
+Content-Type: application/pdf
+
+<binary PDF data>
+------boundary--
+```
+
+### Example: Large File via Reference
+
+A pre-uploaded video is referenced by URI:
+
+```json
+{
+  "op": "media.transcode",
+  "args": { "outputFormat": "h265", "quality": "high" },
+  "media": [
+    { "name": "source", "mimeType": "video/mp4", "ref": "https://uploads.example.com/obj/abc123" }
+  ],
+  "ctx": {
+    "requestId": "660e8400-e29b-41d4-a716-446655440001"
+  }
+}
+```
+
+### Operation Registry
+
+Operations that accept media declare a `mediaSchema` in the registry:
+
+```json
+{
+  "op": "identity.verify",
+  "mediaSchema": [
+    { "name": "selfie", "required": true, "acceptedTypes": ["image/jpeg", "image/png"], "maxBytes": 10485760 },
+    { "name": "bankStatement", "required": true, "acceptedTypes": ["application/pdf"], "maxBytes": 52428800 }
+  ]
+}
+```
+
+- `name` — Matches the `media[].name` in the request envelope.
+- `required` — Whether the attachment is mandatory.
+- `acceptedTypes` — Allowed MIME types. The server MUST reject attachments with types not in this list.
+- `maxBytes` — Maximum file size. The server MUST reject attachments exceeding this limit.
+
+Agents discover media requirements via `/.well-known/ops` and can construct valid multipart requests or pre-upload files accordingly.
+
+### Rules
+
+- The `media` array is always optional at the envelope level. Operations that require attachments enforce this via `mediaSchema`.
+- The server MUST validate each attachment's `mimeType` and size against the operation's `mediaSchema`.
+- When using inline multipart delivery, the envelope JSON MUST be in a part named `envelope`.
+- When no `media` is present, the request is plain `application/json` as normal.
+
+---
+
 ## Stream Subscription Lifecycle
 
 ### Subscription
@@ -493,6 +620,7 @@ Each operation is defined in code with:
 - `op` name
 - argument schema (JSON Schema)
 - result schema (JSON Schema)
+- media schema (accepted attachments, for operations that accept media)
 - frame schema (JSON Schema, for streaming operations)
 - side-effecting flag
 - idempotency requirement
@@ -547,7 +675,7 @@ GET /.well-known/ops
 Returns the full operation registry:
 
 - list of operations
-- schemas (argument, result, and frame)
+- schemas (argument, result, frame, and media)
 - execution characteristics and models
 - supported transports and encodings
 - limits and constraints
@@ -632,10 +760,13 @@ New transports can be added without modifying the core spec.
 The primary and reference binding.
 
 **Envelope mapping:**
-`POST /invoke` with JSON body. Response as JSON.
+`POST /invoke` with JSON body (`application/json`). When the invocation includes inline media attachments, the request uses `multipart/form-data` with the envelope JSON in a part named `envelope` and binary attachments in named parts. Response is always JSON.
 
 **Auth mechanism:**
 `Authorization` header. The envelope `auth` block is not used.
+
+**Media ingress:**
+Inline media uses `multipart/form-data` — browser-native via `<form>` or `fetch` with `FormData`. Pre-uploaded media uses plain JSON with `ref` URIs in the `media` array. See [Media Ingress](#media-ingress).
 
 **Stream support:**
 Stream subscriptions return `303` with the canonical response envelope. The `stream.location` points to an external stream endpoint. The HTTP binding is used only for the handshake; actual stream delivery is over the transport specified in `stream.transport`.
