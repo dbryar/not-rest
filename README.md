@@ -53,7 +53,12 @@ cd tests && bun install && bun test
 
 ```bash
 docker compose -f tests/docker/docker-compose.yml up --build -d
-API_URL=http://localhost:3000 bun test --cwd tests
+
+# Test any implementation — setup auto-registers auth tokens
+API_URL=http://localhost:3001 bun test --cwd tests  # TypeScript
+API_URL=http://localhost:3002 bun test --cwd tests  # Python
+API_URL=http://localhost:3003 bun test --cwd tests  # Java
+API_URL=http://localhost:3004 bun test --cwd tests  # Go
 ```
 
 See [`tests/README.md`](tests/README.md) for details on running tests, adding new language implementations, and the test architecture.

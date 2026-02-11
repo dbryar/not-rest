@@ -21,26 +21,21 @@ Tests import the TypeScript API's `createServer()` function, start it in `before
 
 ```bash
 # Start any OpenCALL-compliant server, then:
-API_URL=http://localhost:3000 AUTH_TOKEN=<token> bun test
+API_URL=http://localhost:3000 bun test
 ```
+
+The test setup automatically waits for the server, registers an auth token via `POST /_internal/tokens`, and runs all tests.
 
 ### Docker Testing (all four languages)
 
 ```bash
 docker compose -f docker/docker-compose.yml up --build -d
 
-# Register tokens on all servers
-for port in 3001 3002 3003 3004; do
-  curl -s -X POST http://localhost:$port/_internal/tokens \
-    -H "Content-Type: application/json" \
-    -d '{"token":"my-token","scopes":["todos:read","todos:write","reports:read"]}'
-done
-
-# Run tests against each language
-API_URL=http://localhost:3001 AUTH_TOKEN=my-token bun test  # TypeScript
-API_URL=http://localhost:3002 AUTH_TOKEN=my-token bun test  # Python
-API_URL=http://localhost:3003 AUTH_TOKEN=my-token bun test  # Java
-API_URL=http://localhost:3004 AUTH_TOKEN=my-token bun test  # Go
+# Test any implementation — setup auto-registers auth tokens
+API_URL=http://localhost:3001 bun test  # TypeScript
+API_URL=http://localhost:3002 bun test  # Python
+API_URL=http://localhost:3003 bun test  # Java
+API_URL=http://localhost:3004 bun test  # Go
 ```
 
 | Service | Port | Language | Framework |
@@ -58,11 +53,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 3002 &
 
-curl -X POST http://localhost:3002/_internal/tokens \
-  -H "Content-Type: application/json" \
-  -d '{"token":"my-token","scopes":["todos:read","todos:write","reports:read"]}'
-
-API_URL=http://localhost:3002 AUTH_TOKEN=my-token bun test
+API_URL=http://localhost:3002 bun test
 ```
 
 ### Java API
@@ -72,11 +63,7 @@ cd api/java
 gradle shadowJar --no-daemon
 java -jar build/libs/app.jar &  # starts on port 3000
 
-curl -X POST http://localhost:3000/_internal/tokens \
-  -H "Content-Type: application/json" \
-  -d '{"token":"my-token","scopes":["todos:read","todos:write","reports:read"]}'
-
-API_URL=http://localhost:3000 AUTH_TOKEN=my-token bun test
+API_URL=http://localhost:3000 bun test
 ```
 
 ### Go API
@@ -85,11 +72,7 @@ API_URL=http://localhost:3000 AUTH_TOKEN=my-token bun test
 cd api/go
 go build -o server . && ./server &  # starts on port 3000
 
-curl -X POST http://localhost:3000/_internal/tokens \
-  -H "Content-Type: application/json" \
-  -d '{"token":"my-token","scopes":["todos:read","todos:write","reports:read"]}'
-
-API_URL=http://localhost:3000 AUTH_TOKEN=my-token bun test
+API_URL=http://localhost:3000 bun test
 ```
 
 ## Test Coverage
@@ -216,7 +199,7 @@ tests/
    - `GET /media/{id}` — media egress (303 redirect)
    - `WebSocket /streams/{sessionId}` — streaming
    - `POST /_internal/tokens` — register auth tokens (test helper)
-3. Start the server, register a token, and run: `API_URL=http://localhost:<port> AUTH_TOKEN=<token> bun test`
+3. Start the server and run: `API_URL=http://localhost:<port> bun test` (setup auto-registers auth tokens)
 4. All 112 tests should pass — the same contract applies to every implementation
 
 ## Environment Variables
@@ -224,5 +207,5 @@ tests/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `API_URL` | `http://localhost:3000` | URL of the API server to test against |
-| `AUTH_TOKEN` | *(set by setup.ts)* | Bearer token for authenticated calls |
+| `AUTH_TOKEN` | *(auto-registered by setup.ts)* | Bearer token for authenticated calls |
 | `PORT` | `3000` | Port for the API server (used by Docker and direct run) |

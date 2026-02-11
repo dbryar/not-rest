@@ -18,4 +18,14 @@ if (!process.env.API_URL) {
   afterAll(async () => {
     await stopServer();
   });
+} else {
+  beforeAll(async () => {
+    await waitForServer(process.env.API_URL);
+    await registerToken(MASTER_TOKEN, [
+      "todos:read",
+      "todos:write",
+      "reports:read",
+    ]);
+    process.env.AUTH_TOKEN = MASTER_TOKEN;
+  });
 }
