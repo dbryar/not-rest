@@ -45,6 +45,18 @@ API_URL=http://localhost:3004 bun test  # Go
 | todo-java | 3003 | Java | Javalin |
 | todo-go | 3004 | Go | Gin |
 
+### A note on performance differences
+
+You'll notice Go and TypeScript complete the test suite ~25% faster than Python and Java. This is not a language benchmark and should not be read as one. The implementations are intentionally naive — in-memory stores, no connection pooling, no optimization — to keep the code readable and focused on the OpenCALL contract.
+
+The timing gap comes from specific implementation choices, not inherent language limitations:
+
+- **Async timer overhead.** The async tests (export, report generation) use nested timers. Go uses `time.AfterFunc` (goroutine, near-zero cost). Bun uses native `setTimeout`. Python uses `threading.Timer` (spawns an OS thread per timer), and Java uses `java.util.Timer` (creates a background thread per instance). With 10+ async tests doing nested timers, thread-creation overhead accumulates.
+- **JVM cold start.** Java's Docker healthcheck includes a 10-second `start_period` that the others don't need. This doesn't affect test execution time, but it's visible in Docker startup.
+- **Registry serialization.** Go and TypeScript pre-serialize the registry JSON once at startup and return raw bytes. Python and Java re-process responses through their framework's serialization pipeline per request.
+
+A production Python API using `asyncio` tasks instead of `threading.Timer`, or a Java API using `ScheduledExecutorService` instead of `java.util.Timer`, would close most of this gap. These reference implementations prioritize clarity over performance.
+
 ### Python API
 
 ```bash
