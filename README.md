@@ -2,7 +2,7 @@
 
 **OpenCALL** — Open Command And Lifecycle Layer — is an API specification designed for a world where humans and AI agents are equal consumers of your services.
 
-REST was built for human developers. MCP was built for agents. OpenCALL replaces both with a single operation-based protocol that serves everyone.
+REST optimizes around resource modeling and HTTP semantics, which work well for human-designed clients but map awkwardly to agent-style invocation. MCP was built for agents often to translate intent to actionable requests. OpenCALL replaces both with a single operation-based protocol that serves everyone.
 
 ## The Problem
 
