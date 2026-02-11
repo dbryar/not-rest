@@ -50,6 +50,15 @@ describe("Error Handling (REQ-ERR)", () => {
     expect(body.error!.message.length).toBeGreaterThan(0);
   });
 
+  test("GET /call returns 405 Method Not Allowed", async () => {
+    const res = await fetch(`${API_URL}/call`);
+    expect(res.status).toBe(405);
+    expect(res.headers.get("allow")).toBe("POST");
+    const body = await res.json();
+    expect(body.state).toBe("error");
+    expect(body.error.code).toBe("METHOD_NOT_ALLOWED");
+  });
+
   test("invalid JSON body returns 400", async () => {
     const res = await fetch(`${API_URL}/call`, {
       method: "POST",

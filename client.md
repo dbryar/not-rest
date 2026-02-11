@@ -53,17 +53,18 @@ type CallResponse = {
   state: "complete" | "accepted" | "pending" | "streaming" | "error"
   result?: unknown
   error?: { code: string; message: string; cause?: unknown }
-  location?: { uri: string; auth?: { tokenType: string; token: string; expiresAt?: string } }
+  location?: { uri: string; auth?: { credentialType: string; credential: string; expiresAt?: number } }
   stream?: {
     transport: string
     encoding: string
     schema: string
     location: string
     sessionId: string
-    ttlSeconds: number
-    auth?: { tokenType: string; token: string; expiresAt?: string }
+    expiresAt?: number
+    auth?: { credentialType: string; credential: string; expiresAt?: number }
   }
   retryAfterMs?: number
+  expiresAt?: number
 }
 
 async function call(
@@ -329,12 +330,12 @@ The client's job is to wait and re-check. The `state` field tells it when to sto
     "schema": "device.PositionFrame",
     "location": "wss://streams.example.com/s/ggg-hhh-iii",
     "sessionId": "mission-001",
-    "ttlSeconds": 3600
+    "expiresAt": 1739282400
   }
 }
 ```
 
-The response hands back everything the client needs: transport, encoding, schema, location, session ID, TTL. The client reads the `stream` object and connects:
+The response hands back everything the client needs: transport, encoding, schema, location, session ID, expiry. The client reads the `stream` object and connects:
 
 ```typescript
 const sub = await call(
@@ -531,8 +532,8 @@ await fetch("https://api.example.com/call", {
   "auth": {
     "iss": "auth.example.com",
     "sub": "device:arm-001",
-    "tokenType": "JWT",
-    "token": "eyJ..."
+    "credentialType": "bearer",
+    "credential": "eyJ..."
   },
   "ctx": { "requestId": "..." }
 }
@@ -542,10 +543,10 @@ await fetch("https://api.example.com/call", {
 
 ```typescript
 const sub = await call("v1:device.subscribePosition", { deviceId: "arm-1" })
-// sub.stream.auth = { tokenType: "bearer", token: "short-lived-xyz", expiresAt: "..." }
+// sub.stream.auth = { credentialType: "bearer", credential: "short-lived-xyz", expiresAt: 1739282400 }
 
 const ws = new WebSocket(sub.stream!.location, {
-  headers: { Authorization: `Bearer ${sub.stream!.auth!.token}` },
+  headers: { Authorization: `Bearer ${sub.stream!.auth!.credential}` },
 })
 ```
 
@@ -566,7 +567,7 @@ When stream credentials expire, the client re-subscribes. The server issues fres
 | Streaming                  | Separate WebSocket client, SSE handler, or polling abstraction   | `stream` object tells you where and how      |
 | Media upload               | Separate upload endpoint, presigned URL flow, multipart builders | `media` array on the same call               |
 | Codegen input              | OpenAPI spec (external artifact, can drift)                      | `/.well-known/ops` (live, canonical)         |
-| Versioning                 | URL path (`/v1/`, `/v2/`), header, or query param               | Version-prefixed op name with sunset dates   |
+| Versioning                 | URL path (`/v1/`, `/v2/`), header, or query param                | Version-prefixed op name with sunset dates   |
 | Package size               | Hundreds of generated classes                                    | One function                                 |
 
 An OpenCALL client is less code because there is less to do. It is not a thin wrapper over a complex protocol. It is the direct expression of intent over a simple protocol. The thinness is the point.

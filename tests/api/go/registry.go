@@ -17,11 +17,15 @@ func buildRegistry() map[string]interface{} {
 			"location": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"uri":    map[string]interface{}{"type": "string"},
-					"method": map[string]interface{}{"type": "string"},
-					"headers": map[string]interface{}{
-						"type":                 "object",
-						"additionalProperties": map[string]interface{}{"type": "string"},
+					"uri": map[string]interface{}{"type": "string"},
+					"auth": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"credentialType": map[string]interface{}{"type": "string"},
+							"credential":     map[string]interface{}{"type": "string"},
+							"expiresAt":      map[string]interface{}{"type": "integer"},
+						},
+						"required": []interface{}{"credentialType", "credential"},
 					},
 				},
 				"required":             []interface{}{"uri"},

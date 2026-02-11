@@ -26,8 +26,17 @@ public final class Registry {
 
         LinkedHashMap<String, Object> locationProps = new LinkedHashMap<>();
         locationProps.put("uri", Map.of("type", "string"));
-        locationProps.put("method", Map.of("type", "string"));
-        locationProps.put("headers", orderedMap("type", "object", "additionalProperties", Map.of("type", "string")));
+
+        LinkedHashMap<String, Object> authProps = new LinkedHashMap<>();
+        authProps.put("credentialType", Map.of("type", "string"));
+        authProps.put("credential", Map.of("type", "string"));
+        authProps.put("expiresAt", Map.of("type", "integer"));
+
+        LinkedHashMap<String, Object> authSchema = new LinkedHashMap<>();
+        authSchema.put("type", "object");
+        authSchema.put("properties", authProps);
+        authSchema.put("required", List.of("credentialType", "credential"));
+        locationProps.put("auth", authSchema);
 
         LinkedHashMap<String, Object> locationSchema = new LinkedHashMap<>();
         locationSchema.put("type", "object");

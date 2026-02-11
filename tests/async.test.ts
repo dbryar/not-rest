@@ -80,4 +80,10 @@ describe("Async Execution (REQ-ASYNC)", () => {
     expect(status).toBe(401);
     expect(body.state).toBe("error");
   });
+
+  test("202 response includes expiresAt as Unix epoch seconds", async () => {
+    const { body } = await call("v1:todos.export", { format: "csv" });
+    expect(typeof body.expiresAt).toBe("number");
+    expect(body.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1000));
+  });
 });

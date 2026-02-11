@@ -26,10 +26,14 @@ _TODO_SCHEMA = {
             "type": "object",
             "properties": {
                 "uri": {"type": "string"},
-                "method": {"type": "string"},
-                "headers": {
+                "auth": {
                     "type": "object",
-                    "additionalProperties": {"type": "string"},
+                    "properties": {
+                        "credentialType": {"type": "string"},
+                        "credential": {"type": "string"},
+                        "expiresAt": {"type": "integer"},
+                    },
+                    "required": ["credentialType", "credential"],
                 },
             },
             "required": ["uri"],

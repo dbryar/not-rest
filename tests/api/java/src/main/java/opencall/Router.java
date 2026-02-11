@@ -1,5 +1,6 @@
 package opencall;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -145,6 +146,7 @@ public final class Router {
                 stream.put("location", "/streams/" + streamSessionId);
                 stream.put("sessionId", streamSessionId);
                 stream.put("encoding", "json");
+                stream.put("expiresAt", Instant.now().plusSeconds(3600).getEpochSecond());
                 body.put("stream", stream);
 
                 LinkedHashMap<String, Object> result = new LinkedHashMap<>();
@@ -170,6 +172,7 @@ public final class Router {
                 LinkedHashMap<String, Object> body = new LinkedHashMap<>(base);
                 body.put("state", "accepted");
                 body.put("retryAfterMs", 100);
+                body.put("expiresAt", Instant.now().plusSeconds(3600).getEpochSecond());
 
                 LinkedHashMap<String, Object> result = new LinkedHashMap<>();
                 result.put("status", 202);

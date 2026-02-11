@@ -8,10 +8,15 @@ from __future__ import annotations
 from typing import TypedDict, Optional
 
 
+class LocationAuthDict(TypedDict, total=False):
+    credentialType: str
+    credential: str
+    expiresAt: Optional[int]
+
+
 class LocationDict(TypedDict, total=False):
     uri: str
-    method: str
-    headers: dict[str, str]
+    auth: Optional[LocationAuthDict]
 
 
 class TodoDict(TypedDict, total=False):

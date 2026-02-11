@@ -186,7 +186,7 @@
 
 #### Acceptance Criteria
 
-1. `v1:todos.watch` SHALL return HTTP 202 with `state=streaming` and a `stream` object containing `transport`, `location`, `sessionId`, and `encoding`
+1. `v1:todos.watch` SHALL return HTTP 202 with `state=streaming` and a `stream` object containing `transport`, `location`, `sessionId`, `encoding`, and `expiresAt`
 2. Connecting to the `stream.location` via WebSocket SHALL succeed
 3. WHEN a todo is created or updated, THE WebSocket SHALL push a change event with the affected todo
 4. THE registry SHALL declare `executionModel: "stream"` and `supportedTransports: ["wss"]`

@@ -82,7 +82,7 @@ export function createServer(port: number = 3000) {
         });
       }
 
-      // GET /call — method not allowed, point to POST /call and registry
+      // GET /call — 405 Method Not Allowed
       if (req.method === "GET" && url.pathname === "/call") {
         return Response.json(
           {
@@ -294,6 +294,7 @@ export function createServer(port: number = 3000) {
         if (instance.state === "accepted" || instance.state === "pending") {
           body.retryAfterMs = instance.retryAfterMs;
         }
+        body.expiresAt = instance.expiresAt;
         return Response.json(body, { status: 200 });
       }
 

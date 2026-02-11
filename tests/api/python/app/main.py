@@ -292,6 +292,7 @@ async def poll_operation(request_id: str) -> JSONResponse:
         body["error"] = instance.error
     if instance.state in ("accepted", "pending"):
         body["retryAfterMs"] = instance.retry_after_ms
+    body["expiresAt"] = instance.expires_at
 
     return JSONResponse(status_code=200, content=body)
 

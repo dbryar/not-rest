@@ -212,6 +212,7 @@ func main() {
 		if instance.State == "accepted" || instance.State == "pending" {
 			body["retryAfterMs"] = instance.RetryAfterMs
 		}
+		body["expiresAt"] = instance.ExpiresAt
 		c.JSON(200, body)
 	})
 

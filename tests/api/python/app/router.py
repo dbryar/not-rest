@@ -4,6 +4,7 @@ Envelope dispatch for the OpenCALL Todo API.
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import datetime
 from typing import Any, Optional
@@ -126,6 +127,7 @@ def handle_call(
                         "location": f"/streams/{stream_result['sessionId']}",
                         "sessionId": stream_result["sessionId"],
                         "encoding": "json",
+                        "expiresAt": int(time.time()) + 3600,
                     },
                 },
             }
@@ -144,6 +146,7 @@ def handle_call(
                     **base,
                     "state": "accepted",
                     "retryAfterMs": 100,
+                    "expiresAt": int(time.time()) + 3600,
                 },
             }
 

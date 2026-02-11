@@ -245,6 +245,7 @@ public class App {
             if ("accepted".equals(instance.state) || "pending".equals(instance.state)) {
                 body.put("retryAfterMs", instance.retryAfterMs);
             }
+            body.put("expiresAt", instance.expiresAt);
 
             ctx.status(200).json(body);
         });

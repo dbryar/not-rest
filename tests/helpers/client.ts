@@ -6,9 +6,10 @@ export interface CallResponse {
   state: "complete" | "error" | "accepted" | "pending" | "streaming"
   result?: unknown
   error?: { code: string; message: string; cause?: Record<string, unknown> }
-  location?: { uri: string; method?: string; headers?: Record<string, string> }
-  stream?: { transport: string; location: string; sessionId: string; encoding?: string }
+  location?: { uri: string; auth?: { credentialType: string; credential: string; expiresAt?: number } }
+  stream?: { transport: string; location: string; sessionId: string; encoding?: string; expiresAt?: number }
   retryAfterMs?: number
+  expiresAt?: number
 }
 
 export async function call(op: string, args: Record<string, unknown> = {}, ctx: Record<string, unknown> = {}): Promise<{ status: number; body: CallResponse }> {

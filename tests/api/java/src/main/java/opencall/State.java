@@ -49,7 +49,8 @@ public final class State {
         public volatile Object result;
         public volatile Map<String, Object> error;
         public final int retryAfterMs;
-        public final String createdAt;
+        public final long createdAt;
+        public final long expiresAt;
         public volatile List<Chunk> chunks;
 
         public OperationInstance(String requestId, String op) {
@@ -59,7 +60,8 @@ public final class State {
             this.result = null;
             this.error = null;
             this.retryAfterMs = 100;
-            this.createdAt = Instant.now().toString();
+            this.createdAt = Instant.now().getEpochSecond();
+            this.expiresAt = Instant.now().plusSeconds(3600).getEpochSecond();
             this.chunks = null;
         }
     }

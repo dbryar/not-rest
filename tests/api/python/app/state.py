@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import base64
-from datetime import datetime, timezone
+import time
 from typing import Optional, Any
 
 
@@ -43,7 +43,7 @@ class Chunk:
 class OperationInstance:
     __slots__ = (
         "request_id", "op", "state", "result", "error",
-        "retry_after_ms", "created_at", "chunks",
+        "retry_after_ms", "created_at", "expires_at", "chunks",
     )
 
     def __init__(self, request_id: str, op: str):
@@ -53,7 +53,8 @@ class OperationInstance:
         self.result: Any = None
         self.error: Optional[dict] = None
         self.retry_after_ms = 100
-        self.created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        self.created_at = int(time.time())
+        self.expires_at = int(time.time()) + 3600
         self.chunks: Optional[list[Chunk]] = None
 
 

@@ -22,6 +22,13 @@ describe("Streaming (REQ-STREAM)", () => {
     expect(body.stream!.transport).toBe("wss");
   });
 
+  test("streaming response includes stream.expiresAt as Unix epoch seconds", async () => {
+    const { body } = await call("v1:todos.watch", {});
+    expect(body.stream).toBeDefined();
+    expect(typeof body.stream!.expiresAt).toBe("number");
+    expect(body.stream!.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1000));
+  });
+
   test("stream.encoding is json", async () => {
     const { body } = await call("v1:todos.watch", {});
     expect(body.stream!.encoding).toBe("json");

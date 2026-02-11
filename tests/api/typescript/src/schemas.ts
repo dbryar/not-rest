@@ -13,8 +13,11 @@ export const TodoSchema = z.object({
   attachmentId: z.string().optional(),
   location: z.object({
     uri: z.string(),
-    method: z.string().optional(),
-    headers: z.record(z.string()).optional(),
+    auth: z.object({
+      credentialType: z.string(),
+      credential: z.string(),
+      expiresAt: z.number().optional(),
+    }).optional(),
   }).optional(),
 });
 

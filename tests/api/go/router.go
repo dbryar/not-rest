@@ -202,6 +202,7 @@ func handleCall(envelope map[string]interface{}, authHeader string, mf *mediaFil
 					"location":  fmt.Sprintf("/streams/%s", streamResult["sessionId"]),
 					"sessionId": streamResult["sessionId"],
 					"encoding":  "json",
+					"expiresAt": time.Now().Add(3600 * time.Second).Unix(),
 				},
 			}),
 		}
@@ -224,6 +225,7 @@ func handleCall(envelope map[string]interface{}, authHeader string, mf *mediaFil
 			"body": mergeMap(copyMap(base), map[string]interface{}{
 				"state":        "accepted",
 				"retryAfterMs": 100,
+				"expiresAt":    time.Now().Add(3600 * time.Second).Unix(),
 			}),
 		}
 	}
