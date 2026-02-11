@@ -16,12 +16,13 @@ interface CallRequest {
 interface CallResponse {
   requestId: string;
   sessionId?: string;
-  state: "complete" | "error" | "accepted" | "streaming";
+  state: "complete" | "error" | "accepted" | "pending" | "streaming";
   result?: unknown;
   error?: { code: string; message: string; cause?: Record<string, unknown> };
+  location?: { uri: string; auth?: { credentialType: string; credential: string; expiresAt?: number } };
   retryAfterMs?: number;
   expiresAt?: number;
-  stream?: { transport: string; location: string; sessionId: string; encoding: string; expiresAt?: number };
+  stream?: { transport: string; location: string; sessionId: string; encoding: string; expiresAt?: number; auth?: { credentialType: string; credential: string; expiresAt?: number } };
 }
 
 export function handleCall(

@@ -53,7 +53,7 @@ type CallResponse = {
   state: "complete" | "accepted" | "pending" | "streaming" | "error"
   result?: unknown
   error?: { code: string; message: string; cause?: unknown }
-  location?: { uri: string; auth?: { method: string; token: string; expiresAt?: number } }
+  location?: { uri: string; auth?: { credentialType: string; credential: string; expiresAt?: number } }
   stream?: {
     transport: string
     encoding: string
@@ -61,7 +61,7 @@ type CallResponse = {
     location: string
     sessionId: string
     expiresAt?: number
-    auth?: { method: string; token: string; expiresAt?: number }
+    auth?: { credentialType: string; credential: string; expiresAt?: number }
   }
   retryAfterMs?: number
   expiresAt?: number
@@ -532,8 +532,8 @@ await fetch("https://api.example.com/call", {
   "auth": {
     "iss": "auth.example.com",
     "sub": "device:arm-001",
-    "method": "JWT",
-    "token": "eyJ..."
+    "credentialType": "bearer",
+    "credential": "eyJ..."
   },
   "ctx": { "requestId": "..." }
 }
@@ -543,10 +543,10 @@ await fetch("https://api.example.com/call", {
 
 ```typescript
 const sub = await call("v1:device.subscribePosition", { deviceId: "arm-1" })
-// sub.stream.auth = { method: "bearer", token: "short-lived-xyz", expiresAt: 1739282400 }
+// sub.stream.auth = { credentialType: "bearer", credential: "short-lived-xyz", expiresAt: 1739282400 }
 
 const ws = new WebSocket(sub.stream!.location, {
-  headers: { Authorization: `Bearer ${sub.stream!.auth!.token}` },
+  headers: { Authorization: `Bearer ${sub.stream!.auth!.credential}` },
 })
 ```
 
