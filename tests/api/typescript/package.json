@@ -1,0 +1,13 @@
+{
+  "name": "opencall-todo-typescript",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun run --watch src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^3.24",
+    "zod-to-json-schema": "^3.24"
+  }
+}

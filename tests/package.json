@@ -1,0 +1,13 @@
+{
+  "name": "opencall-example-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "cd api/typescript && bun install",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

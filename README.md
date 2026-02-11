@@ -39,6 +39,30 @@ That's it. A human developer can read it. An agent can call it. The operation na
 - **Versioned operations** — version-prefixed names (`v1:orders.getItem`), additive-first evolution rules, and a deprecation lifecycle with contractual sunset dates
 - **Transport-aware auth** — HTTP uses headers, MQTT/Kafka use envelope auth, QUIC uses built-in TLS. One auth model, transport-specific enforcement
 
+## Example Implementations
+
+The [`tests/`](tests/) directory contains a language-agnostic test suite and reference API implementations. The test suite validates any implementation against the OpenCALL contract via HTTP.
+
+**Quick start (TypeScript):**
+
+```bash
+cd tests && bun install && bun test
+```
+
+**Docker:**
+
+```bash
+docker compose -f tests/docker/docker-compose.yml up --build -d
+
+# Test any implementation — setup auto-registers auth tokens
+API_URL=http://localhost:3001 bun test --cwd tests  # TypeScript
+API_URL=http://localhost:3002 bun test --cwd tests  # Python
+API_URL=http://localhost:3003 bun test --cwd tests  # Java
+API_URL=http://localhost:3004 bun test --cwd tests  # Go
+```
+
+See [`tests/README.md`](tests/README.md) for details on running tests, adding new language implementations, and the test architecture.
+
 ## Read More
 
 The full specification is in [`specification.md`](specification.md). For what this means on the client side — and why your REST SDK is apology code — see [`client.md`](client.md). For how OpenCALL compares to JSON-RPC, GraphQL, gRPC, SOAP, MCP, A2A, and others — see [`comparisons.md`](comparisons.md).
