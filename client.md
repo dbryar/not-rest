@@ -53,7 +53,7 @@ type CallResponse = {
   state: "complete" | "accepted" | "pending" | "streaming" | "error"
   result?: unknown
   error?: { code: string; message: string; cause?: unknown }
-  location?: { uri: string; auth?: { tokenType: string; token: string; expiresAt?: number } }
+  location?: { uri: string; auth?: { method: string; token: string; expiresAt?: number } }
   stream?: {
     transport: string
     encoding: string
@@ -61,7 +61,7 @@ type CallResponse = {
     location: string
     sessionId: string
     expiresAt?: number
-    auth?: { tokenType: string; token: string; expiresAt?: number }
+    auth?: { method: string; token: string; expiresAt?: number }
   }
   retryAfterMs?: number
   expiresAt?: number
@@ -532,7 +532,7 @@ await fetch("https://api.example.com/call", {
   "auth": {
     "iss": "auth.example.com",
     "sub": "device:arm-001",
-    "tokenType": "JWT",
+    "method": "JWT",
     "token": "eyJ..."
   },
   "ctx": { "requestId": "..." }
@@ -543,7 +543,7 @@ await fetch("https://api.example.com/call", {
 
 ```typescript
 const sub = await call("v1:device.subscribePosition", { deviceId: "arm-1" })
-// sub.stream.auth = { tokenType: "bearer", token: "short-lived-xyz", expiresAt: 1739282400 }
+// sub.stream.auth = { method: "bearer", token: "short-lived-xyz", expiresAt: 1739282400 }
 
 const ws = new WebSocket(sub.stream!.location, {
   headers: { Authorization: `Bearer ${sub.stream!.auth!.token}` },
@@ -567,7 +567,7 @@ When stream credentials expire, the client re-subscribes. The server issues fres
 | Streaming                  | Separate WebSocket client, SSE handler, or polling abstraction   | `stream` object tells you where and how      |
 | Media upload               | Separate upload endpoint, presigned URL flow, multipart builders | `media` array on the same call               |
 | Codegen input              | OpenAPI spec (external artifact, can drift)                      | `/.well-known/ops` (live, canonical)         |
-| Versioning                 | URL path (`/v1/`, `/v2/`), header, or query param               | Version-prefixed op name with sunset dates   |
+| Versioning                 | URL path (`/v1/`, `/v2/`), header, or query param                | Version-prefixed op name with sunset dates   |
 | Package size               | Hundreds of generated classes                                    | One function                                 |
 
 An OpenCALL client is less code because there is less to do. It is not a thin wrapper over a complex protocol. It is the direct expression of intent over a simple protocol. The thinness is the point.

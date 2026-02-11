@@ -2,13 +2,14 @@
 
 ## Overview
 
-OpenCALL is a single, self-describing operation invocation API designed to serve both:
+OpenCALL is an attempt to unify human-oriented APIs and agent-style tool invocation into a single operation contract using a uniform envelope.
+
+It is designed to serve both:
 
 - human-facing UI/frontends, and
-- LLM-powered agents (via a single `call` tool).
+- LLM-powered agents
 
-OpenCALL is an attempt to unify human-oriented HTTP APIs and agent-style tool invocation into a single operation contract using a uniform envelope.
-The core specification is transport-agnostic; semantics are operation-driven. Transport-specific behavior is defined in the [Transport Bindings Appendix](#transport-bindings-appendix).
+via a single `call` endpoint and tool.
 
 The system supports:
 
@@ -19,6 +20,8 @@ The system supports:
 - strong error signaling without overloading HTTP status codes
 - backend orchestration via state machines
 - application-level session correlation and infrastructure-level tracing
+
+The core specification is transport-agnostic; semantics are operation-driven. Transport-specific behavior is defined in the [Transport Bindings Appendix](#transport-bindings-appendix).
 
 ---
 
@@ -31,7 +34,7 @@ The system supports:
 5. **Pull-based progression (agent-compatible), push-based when the domain requires it**
 6. **Single canonical envelope**
 7. **One controller registry, multiple bindings**
-8. **No duplicate media ingress/egress**
+8. **No duplicate media ingress/egress** - lower cost, better performance, native client handling, cache-friendly
 9. **Transport-agnostic core, transport-specific bindings**
 10. **Self-describing envelopes** — an envelope should be understandable in isolation
 
@@ -40,7 +43,7 @@ The system supports:
 ## Domains
 
 - `api.example.com` — UI and general API access
-- `agents.example.com` — agent access (MCP-like, single tool)
+- `agent.example.com` — agent access (MCP-like, single tool)
 - `results.example.com` — optional external result storage (e.g. S3/CDN)
 - `streams.example.com` — optional external stream endpoints
 
@@ -74,6 +77,8 @@ The version prefix is part of the `op` name — it flows through the envelope, r
 
 All operations start at `v1`. When a breaking change is needed, a new version is introduced (e.g. `v2:orders.getItem`) while the old version remains available until its sunset date. See [Schema Evolution](#schema-evolution) for what constitutes a breaking change.
 
+If a namespace is not needed for a simple API, the operation name can be just `v1:getItem`. The version prefix is still required.
+
 ---
 
 ## Invocation Request Envelope
@@ -90,7 +95,7 @@ All operations start at `v1`. When a breaking change is needed, a new version is
       "part": "string (multipart part name, optional)"
     }
   ],
-  "ctx": {
+  "ctx (optional)": {
     "requestId": "uuid",
     "sessionId": "uuid (optional)",
     "parentId": "uuid (optional)",
@@ -102,8 +107,8 @@ All operations start at `v1`. When a breaking change is needed, a new version is
   "auth": {
     "iss": "string",
     "sub": "string",
-    "tokenType": "string",
-    "token": "string (optional)"
+    "credentialType": "string",
+    "credential": "string (optional)"
   }
 }
 ```
@@ -123,8 +128,11 @@ All operations start at `v1`. When a breaking change is needed, a new version is
   - `media[].ref` — URI of a pre-uploaded object. Used for large files. Mutually exclusive with `part`.
   - `media[].part` — Multipart part name where the binary data is attached. Used for inline uploads via `multipart/form-data`. Mutually exclusive with `ref`.
 
+- `ctx`
+  Optional. If omitted, the server generates a `requestId` and uses defaults for all other context fields.
+
 - `ctx.requestId`
-  Client-supplied or generated correlation ID.
+  Required when `ctx` is present. Client-supplied correlation ID. If `ctx` is omitted entirely, the server generates a UUID.
 
 - `ctx.sessionId`
   Optional. Groups related operations into an application-level session (e.g. a robot mission, a monitoring window, a multi-step workflow). Set by the caller.
@@ -136,10 +144,10 @@ All operations start at `v1`. When a breaking change is needed, a new version is
   Required for side-effecting operations. Optional otherwise.
 
 - `ctx.timeoutMs`
-  Client hint for synchronous execution threshold.
+  Client hint for synchronous execution threshold. If omitted, the server uses its own default threshold for deciding between synchronous and asynchronous execution.
 
 - `ctx.locale`
-  Optional localization hint.
+  Optional localization hint. Used for operations that return human-facing content (e.g. error messages, generated text, formatted documents) when localization is supported.
 
 - `ctx.traceparent`
   Optional. OpenTelemetry trace context for infrastructure-level distributed tracing. Serves a different layer than `sessionId`/`parentId` — application-level correlation vs infrastructure observability.
@@ -148,16 +156,16 @@ All operations start at `v1`. When a breaking change is needed, a new version is
   Optional top-level authentication block. Required by transport bindings that lack native auth mechanisms (e.g. MQTT, Kafka). HTTP(S) bindings use the `Authorization` header instead. See [Auth Model](#auth-model).
 
 - `auth.iss`
-  Token issuer (e.g. `auth.example.com`).
+  Issuer (e.g. `auth.example.com`). The authority that issued the credential.
 
 - `auth.sub`
   Subject identity (e.g. `device:1234`, `agent:claude-session-xyz`).
 
-- `auth.tokenType`
-  Credential type (e.g. `JWT`, `API_KEY`, `mTLS`).
+- `auth.credentialType`
+  Credential type (e.g. `bearer`, `apiKey`, `otk`, `mTLS`).
 
-- `auth.token`
-  The credential itself. Optional when the transport carries credentials natively. **Implementations MUST treat an incoming `auth.token` as a secret and MUST NOT log it.**
+- `auth.credential`
+  The credential itself. Optional when the transport carries credentials natively. **Implementations MUST treat an incoming `auth.credential` as a secret and MUST NOT log it.**
 
 ---
 
@@ -181,19 +189,19 @@ All protocol-level responses SHOULD return this canonical envelope whenever a pa
     "encoding": "protobuf | json | cbor | binary",
     "schema": "string",
     "location": "string (URI)",
-    "sessionId": "uuid",
+    "sessionId": "uuid (optional, echoed from parent session)",
     "expiresAt": "integer (Unix epoch seconds, optional)",
     "auth": {
-      "tokenType": "bearer | apiKey | otk",
-      "token": "string",
+      "credentialType": "bearer | apiKey | otk | mTLS",
+      "credential": "string",
       "expiresAt": "integer (Unix epoch seconds, optional)"
     }
   },
   "location": {
     "uri": "string",
     "auth": {
-      "tokenType": "bearer | apiKey | otk",
-      "token": "string",
+      "credentialType": "bearer | apiKey | otk | mTLS",
+      "credential": "string",
       "expiresAt": "integer (Unix epoch seconds, optional)"
     }
   },
@@ -205,7 +213,7 @@ All protocol-level responses SHOULD return this canonical envelope whenever a pa
 ### Fields
 
 - `state`
-  - `accepted` — the server has acknowledged and queued the operation. Execution has not yet started — the operation may be waiting for resources, upstream availability, or scheduling. The operation is not rejected and has not failed.
+  - `accepted` — the server has acknowledged and queued the operation but execution has not yet started — the operation may be waiting for resources, upstream availability, or scheduling. The `accepted` state may appear in the initial response or the polling response. The operation is not rejected and has not failed.
   - `pending` — execution has started and is in progress. The server is actively working on producing a result. The final result is not yet ready.
   - `complete` — operation finished successfully, `result` present
   - `streaming` — stream established, `stream` object present
@@ -215,32 +223,34 @@ All protocol-level responses SHOULD return this canonical envelope whenever a pa
   Echoed from the request `ctx.sessionId` so responses are self-describing.
 
 - `result`
-  Present only when `state=complete`.
+  Present when `state=complete` and the result is delivered inline. Mutually exclusive with `location`, `error`, and `stream`. When the result is hosted externally (e.g. a generated file in an object store), the server returns `location` instead. Clients MUST check for both `result` and `location` when `state=complete`.
 
 - `error`
-  Present only when `state=error`.
+  Present only when `state=error`. Mutually exclusive with `result`, `location`, and `stream`.
 
 - `stream`
-  Present only when `state=streaming`. Contains everything the caller needs to connect to the stream. Fields:
+  Present only when `state=streaming`. Mutually exclusive with `result`, `location`, and `error`. Contains everything the caller needs to connect to the stream. Fields:
   - `stream.transport` — The protocol to connect with (e.g. `wss`, `mqtt`, `kafka`, `webrtc`, `quic`).
   - `stream.encoding` — How frames are encoded on the wire (e.g. `protobuf`, `json`, `cbor`, `binary`).
   - `stream.schema` — Fully-qualified schema name for each frame, so the consumer knows how to deserialize.
   - `stream.location` — URI of the stream endpoint to connect to.
-  - `stream.sessionId` — Stream session identifier.
+  - `stream.sessionId` — Stream session identifier. Echoed from the request `ctx.sessionId` if present.
   - `stream.expiresAt` — Optional. Integer (Unix epoch seconds) indicating when the server may close the stream. The caller SHOULD re-subscribe before this time.
-  - `stream.auth` — Optional. Short-lived credentials for authenticating to the stream endpoint. Present when `stream.location` requires authentication beyond what the transport provides natively.
-  - `stream.auth.tokenType` — Credential type: `bearer` (Authorization header), `apiKey` (query parameter or header), `otk` (one-time key consumed on first use).
-  - `stream.auth.token` — The credential value.
+  - `stream.auth` — Optional. When present, provides credentials for the stream endpoint. When absent, the caller SHOULD reuse the same credential it used for the original `/call` request. Omitted when `stream.location` does not require additional authentication beyond what the transport provides natively.
+  - `stream.auth.credentialType` — Credential type: `bearer` (Authorization header), `apiKey` (query parameter or header), `otk` (one-time key consumed on first use).
+  - `stream.auth.credential` — The credential value.
   - `stream.auth.expiresAt` — Optional. Integer (Unix epoch seconds) indicating when the credentials expire. The caller MUST re-subscribe before this time to obtain fresh credentials. Omitted for one-time keys that have no time-based expiry.
 
-- `result`, `error`, and `stream` are mutually exclusive — exactly one is present depending on `state`.
+- `result`, `location`, `error`, and `stream` are mutually exclusive — exactly one is present depending on `state`.
 
 - `location`
-  Present when the caller needs to retrieve a result or connect to a resource at a different endpoint. A self-describing object containing the target URI and optional auth. The server returns 303 only when the target is plain HTTP with no auth (client auto-follows). Otherwise the server returns 202 and the client reads the body to get the URI, auth, and any transport details.
+  Present when the caller should retrieve a result from, or poll at, a different endpoint. MAY appear with any `state` except `error`. A self-describing object containing the target URI and optional auth.
+  During async execution (`state=accepted` or `state=pending`), `location` points to the polling endpoint. On completion (`state=complete`), `location` points to the external result (e.g. a generated file in an object store). A given operation may use `location` for polling, for the final result, or for both at different stages.
+  The server returns 303 only when the target requires no caller-supplied credentials and no transport change (client auto-follows). Otherwise the server returns 202 and the client reads the body to get the URI, auth, and any transport details.
   - `location.uri` — The target endpoint URI.
-  - `location.auth` — Optional. Short-lived credentials for the target. Omitted when the URI is pre-signed or publicly accessible.
-  - `location.auth.tokenType` — Credential type: `bearer`, `apiKey`, or `otk`.
-  - `location.auth.token` — The credential value.
+  - `location.auth` — Optional. When present, provides credentials for the target. When absent, the caller SHOULD reuse the same credential it used for the original `/call` request (e.g. the same `Authorization` header). Omitted entirely when the URI is pre-signed or publicly accessible.
+  - `location.auth.credentialType` — Credential type: e.g. `bearer`, `apiKey`, `otk`, `mTLS`.
+  - `location.auth.credential` — The credential value.
   - `location.auth.expiresAt` — Optional. Integer (Unix epoch seconds) indicating when the credentials expire.
 
 - `retryAfterMs`
@@ -260,7 +270,7 @@ The spec supports three execution models. The operation registry declares which 
 1. Caller sends `POST /call`
 2. Server returns `200` with `state=complete` and `result`
 
-Used when the operation completes within the caller's `timeoutMs` hint.
+Used when the operation is expected to complete within the caller's `timeoutMs` hint. It is up to the controller implementation to determine what "expected" means — it could be based on historical execution times, a static threshold, or dynamic load conditions.
 
 ### Asynchronous
 
@@ -268,7 +278,7 @@ Used when the operation completes within the caller's `timeoutMs` hint.
 2. Server returns `202` with `state=accepted` and a `location` for polling
 3. Caller polls `GET /ops/{requestId}` until `state=complete` or `state=error`
 
-Used for long-running operations.
+Used for longer running operations, particularly those that involve heavy computation, human review, or orchestration of multiple steps. The `location` object in the `202` response tells the caller where to poll for results and how long they have until the operational result expires.
 
 ### Stream Subscription
 
@@ -277,7 +287,11 @@ Used for long-running operations.
 3. Caller reads the `stream` object, connects to `stream.location` using the specified `stream.transport` and credentials if provided
 4. Frames arrive as raw encoded data — no envelope wrapping per frame
 
-Used for continuous data feeds (sensor telemetry, video, position tracking).
+Used for continuous data feeds (sensor telemetry, video, position tracking). The server manages the stream lifecycle and can enforce TTLs via `stream.expiresAt`. The client is responsible for re-subscribing before expiry to maintain continuity.
+
+### Note on Media Proxies and Large Object Handling
+
+Operations that involve large media objects (e.g. video, audio, large files) use a redirection pattern rather than proxying the data through the API server. This is covered in detail in the [Media and Large Object Handling](#media-and-large-object-handling) section.
 
 ---
 
@@ -289,31 +303,36 @@ The system MUST return a descriptive payload whenever possible.
 
 ### Status Code Usage
 
-| Status | Meaning                                                                                                                                                                                                                  |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 200    | Successful synchronous completion                                                                                                                                                                                        |
-| 202    | Accepted — result available later, or resource available at a location requiring auth or a non-HTTP transport. The response body contains the `location` or `stream` object. Client MUST read the body before connecting |
-| 303    | Resource available at an unsecured HTTP location. No auth required, no transport change. Client may auto-follow the `Location` header                                                                                    |
-| 400    | Invalid operation — the request is malformed, the operation does not exist, or the arguments fail schema validation. The error payload describes why                                                                     |
-| 401    | Authentication invalid                                                                                                                                                                                                   |
-| 403    | Authentication valid but insufficient                                                                                                                                                                                    |
-| 404    | Resource not found — the requested operation result, chunk, or media object does not exist or has expired                                                                                                                |
-| 405    | Method not allowed — the HTTP method is not supported for the requested endpoint                                                                                                                                         |
-| 410    | Operation removed — the operation existed but has been removed past its sunset date. The error payload includes `replacement` if a successor exists                                                                      |
-| 500    | Internal failure with full error payload                                                                                                                                                                                 |
-| 502    | Upstream dependency failure                                                                                                                                                                                              |
-| 503    | Service unavailable                                                                                                                                                                                                      |
+| Status | Meaning                                                                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | Successful synchronous completion.                                                                                                                                     |
+| 202    | Accepted — result not yet ready, or resource at a location requiring credentials or a transport change. See note below.                                                |
+| 303    | Resource available via HTTP(S) redirect that can be safely auto-followed using standard client behavior. See note below.                                               |
+| 400    | Invalid operation — the request is malformed, the operation does not exist, or the arguments fail schema validation. The error payload describes why.                  |
+| 401    | Authentication invalid.                                                                                                                                                |
+| 403    | Authentication valid but insufficient.                                                                                                                                 |
+| 404    | Resource not found — the requested operation result, chunk, or media object does not exist or has expired.                                                             |
+| 405    | Method not allowed — the HTTP method is not supported for the requested endpoint.                                                                                      |
+| 410    | Operation removed — the operation existed but has been removed (past its sunset date). The error payload includes `replacement` if a successor exists.                 |
+| 429    | Too many requests — the caller is polling too frequently or has exceeded a reasonable rate limit. The `retryAfterMs` field indicates how long to wait before retrying. |
+| 500    | Internal failure with full error payload.                                                                                                                              |
+| 502    | Upstream dependency failure.                                                                                                                                           |
+| 503    | Service unavailable.                                                                                                                                                   |
 
 ### Notes
 
+- 303 is reserved for plain HTTP redirects. The `Location` header and `location.uri` carry the same URI. No response body processing is required and no transport changes should occur.
+- 202 MUST be used instead of 303 when any of: auth is required, the target uses a non-HTTP transport (WebSocket, MQTT, QUIC, etc.), or the result is not yet ready. The caller reads the body and connects manually.
+- 202 responses MUST be read by the client. The body contains the canonical envelope with `location` (for polling or retrieval), `stream` (for stream subscription), or `auth` details the client needs to proceed. The client MUST NOT treat 202 as a simple acknowledgement.
+
 - **Domain errors vs protocol errors:** Business and domain failures — "user not found", "insufficient funds", "order already cancelled" — return HTTP 200 (for sync) or HTTP 202 (for async) with `state=error` and a structured error payload. HTTP 4xx codes are reserved for protocol-level failures: malformed envelope (400), unknown operation (400), expired resource (404), invalid auth (401), insufficient permissions (403). A caller should never need to inspect HTTP status codes to distinguish business outcomes — that information is always in the `state` and `error` fields.
 - 400 responses MUST include the canonical error envelope describing the validation failure (e.g. unknown operation, missing required arguments, schema mismatch).
+  When the request does not include a parseable requestId, the server MUST generate one for the error response.
 - 404 responses on `/ops/{requestId}` or `/ops/{requestId}/chunks` indicate the operation instance has expired past its TTL or never existed. Callers should not retry.
-- HTTP 500 responses MUST include a full error payload and a panic/error code.
-- Zero-information 500 responses are forbidden.
-- 303 is reserved for plain HTTP redirects with no auth and no transport change (e.g. pre-signed S3 URL, public CDN). The `Location` header and `location.uri` carry the same URI.
-- 202 MUST be used instead of 303 when any of: auth is required, the target uses a non-HTTP transport (WebSocket, MQTT, QUIC, etc.), or the result is not yet ready. The caller reads the body and connects manually.
+- HTTP 500 responses MUST include a full error payload and any panic/error code.
 - 410 responses indicate that a deprecated operation has been removed past its sunset date. The error payload MUST include the `OP_REMOVED` code and SHOULD include the `replacement` operation name if one exists.
+- **Zero-information responses are forbidden.** _"There was a problem, that's all we know"_ is **not acceptable**. If the server doesn't know what went wrong, it should say so in the error message rather than leaving the caller in the dark.
+  Should infrastructure errors occur or a pre-filter (e.g. WAF rule, transport layer auth failure, etc.) be triggered before the request reaches the application, a generic response with no body is acceptable since the request never made it to the API.
 
 ---
 
@@ -343,11 +362,17 @@ Many operations are inherently uncacheable — commands, side-effecting mutation
 
 ### Result State Endpoint
 
+The `location.uri` SHOULD include the caller's `requestId` for polling — unless the target is a static asset that can be retrieved directly. When the target is hosted on a different domain or shard, the `location.uri` MUST be a fully-qualified URL (not just a path), and the client MUST be able to resolve it.
+
+The suggested polling endpoint is:
+
 ```
 GET /ops/{requestId}
 ```
 
 Returns the canonical response envelope.
+
+The controller may implement rate limiting and return `429 Too Many Requests` if the caller exceeds a reasonable polling cadence. The `retryAfterMs` field in the response indicates how long the caller should wait before polling again.
 
 ---
 
@@ -365,6 +390,8 @@ GET /ops/{requestId}/chunks?cursor={cursor}
 
 ```json
 {
+  "requestId": "uuid",
+  "sessionId": "uuid (optional, echoed)",
   "state": "pending | complete",
   "mimeType": "string",
   "cursor": "string",
@@ -408,7 +435,7 @@ GET /ops/{requestId}/chunks?cursor={cursor}
 
 ### Chunk Data Encoding
 
-For the HTTP(S) binding, the default chunk response is a JSON object with `data` as a string. For text-based content (CSV, JSON), the `data` field contains the raw text. For binary content, the `data` field contains base64-encoded bytes.
+For the HTTP(S) binding, the default chunk response is a JSON object with `data` as a string. For text-based content (e.g. CSV), the `data` field contains the raw text. For binary content, the `data` field contains base64-encoded bytes.
 
 Implementers MAY support a binary response mode where the chunk metadata is carried in response headers and the body contains raw bytes. This is a binding-level optimization — the logical chunk semantics (offset, checksum, cursor, chain validation) are unchanged.
 
@@ -416,26 +443,18 @@ Implementers MAY support a binary response mode where the chunk metadata is carr
 
 The `checksumPrevious` field implements adjacent chaining, not a Merkle tree. Each chunk references the checksum of the immediately preceding chunk only. This is designed for sequential pull-based reassembly: the receiver processes chunks in order and verifies that each chunk follows its predecessor without gaps or reordering.
 
-Adjacent chaining detects:
-
-- Missing chunks (the chain breaks)
-- Reordered chunks (the previous checksum doesn't match)
-- Duplicate deliveries (the offset and checksum match a chunk already received)
-
-It does not provide random-access verification or parallel chunk validation. For those use cases, implementers can layer additional integrity mechanisms above the spec.
-
 ---
 
 ## Media and Large Object Handling
 
 ### Rule
 
-The API MUST NOT proxy or re-stream large media objects (audio/video).
+The API SHOULD NOT proxy or re-stream large media objects (audio/video).
 
 ### Media Flow
 
 1. Operation returns either:
-   - `303 See Other` with `Location` header — when no auth is needed and the target is plain HTTP (e.g. pre-signed URL, public CDN). Client auto-follows.
+   - `303 See Other` with `Location` header — when no explicit auth is needed and the target is plain HTTP (e.g. pre-signed URL, public CDN). Client auto-follows.
    - `202 Accepted` with `location` object — when credentials are needed or the target uses a non-HTTP transport. Client reads the body and connects manually.
 
 2. No envelope is returned at the redirected location.
@@ -446,7 +465,7 @@ The API MUST NOT proxy or re-stream large media objects (audio/video).
 
 ### Rationale
 
-- Avoids duplicate ingress/egress
+- Avoids duplicate ingress/egress costs
 - Enables CDN optimization
 - Allows native browser and media player handling
 
@@ -746,16 +765,16 @@ Authentication is transport-aware. The core spec defines the `auth` shape; enfor
   "auth": {
     "iss": "string",
     "sub": "string",
-    "tokenType": "JWT | API_KEY | mTLS",
-    "token": "string (optional)"
+    "credentialType": "bearer | apiKey | otk | mTLS",
+    "credential": "string (optional)"
   }
 }
 ```
 
-- `iss` — Token issuer (e.g. `auth.example.com`)
+- `iss` — Issuer (e.g. `auth.example.com`). The authority that issued the credential.
 - `sub` — Subject identity (e.g. `device:1234`, `agent:claude-session-xyz`)
-- `tokenType` — Credential type
-- `token` — The credential itself. Optional when the transport carries it natively.
+- `credentialType` — Credential type (e.g. `bearer`, `apiKey`, `otk`, `mTLS`). It is up to the implementation to define the supported methods and their semantics.
+- `credential` — The credential itself. Optional when the transport carries it natively.
 
 ### Transport Auth Mapping
 
@@ -772,18 +791,23 @@ Authentication is transport-aware. The core spec defines the `auth` shape; enfor
 
 - The envelope `auth` block is always optional in the core spec.
 - Transport bindings declare whether it is required.
-- The server returns 202 (not 303) when auth is required or the target uses a non-HTTP transport. Short-lived credentials are provided via `stream.auth` (for streams) or `location.auth` (for media/results). 303 is reserved for plain HTTP redirects with no auth and no transport change. See the [response envelope](#invocation-response-envelope-canonical) for field definitions.
-- The operation registry's `authScopes` field declares what permissions each operation requires, regardless of transport.
+- The operation registry’s `authScopes` field declares required permissions per operation, regardless of transport.
+- The server MUST use 202 (not 303) when the client must read the response body to proceed — including to obtain short-lived credentials (`stream.auth` / `location.auth`), to handle a transport change (WebSocket/MQTT/QUIC/etc.), or to apply any connection instructions beyond standard HTTP redirect handling.
+- The server MAY use 303 only for HTTP(S) redirects that a generic client can safely auto-follow using standard redirect behavior (typically a GET), without requiring specific processing of the OpenCALL response body. This includes public resources, pre-signed URLs, same-origin resources using ambient credentials (e.g. cookies), or environments where authenticated access is already implicitly satisfied.
 
 ---
 
 ## Operation Registry (Source of Truth)
 
-Each operation is defined in code with:
+The operation registry is intended to be generated from code, not hand-maintained. Implementations typically derive the registry from source annotations — JSDoc tags, Go doc comments, Python decorators, Java annotations — using build-time tooling similar to how TSOA generates OpenAPI from TypeScript controllers.
 
-The operation registry is intended to be generated from code, not hand-maintained. Implementations typically derive the registry from source annotations — JSDoc tags, Go doc comments, Python decorators, Java annotations — using build-time tooling similar to how TSOA generates OpenAPI from TypeScript controllers. The version-prefixed namespace (`v1:namespace.operation`) naturally supports multi-team ownership: each team governs their namespace, and the registry is assembled at build or boot time.
+The version-prefixed namespace (`v1:namespace.operation`) naturally supports multi-team ownership: each team governs their namespace, and the registry is assembled at build or boot time.
 
 The generation mechanism is an implementation detail. The spec requires only that `GET /.well-known/ops` returns a conformant registry — how it gets built is up to the developer.
+
+### Registry Entry Fields
+
+Each operation is defined in code with:
 
 - `op` name (version-prefixed: `v1:namespace.operation`)
 - argument schema (JSON Schema)
@@ -795,13 +819,13 @@ The generation mechanism is an implementation detail. The spec requires only tha
 - execution model (`sync`, `async`, or `stream`)
 - max synchronous execution time
 - chunk support flag
-- supported transports (for streaming operations)
-- supported encodings (for streaming operations)
-- default stream TTL (for streaming operations)
-- frame integrity flag (for streaming operations)
-- result retention TTL (optional, default per-operation)
+- result TTL as `ttlSeconds` (for async operations)
 - auth scopes
 - caching policy
+- supported transports (for streaming operations)
+- supported encodings (for streaming operations)
+- stream TTL as `ttlSeconds` (for streaming operations)
+- frame integrity flag (for streaming operations)
 - deprecated flag (optional, defaults to `false`)
 - sunset date (ISO 8601 `YYYY-MM-DD`, present only when deprecated)
 - replacement operation name (present only when deprecated)
@@ -853,13 +877,14 @@ When an operation is deprecated, the registry entry includes `deprecated`, `suns
 
 ### Fields
 
-- `executionModel` — Declares how the operation executes: `sync` returns a result immediately, `async` returns a polling location, `stream` returns 202 with stream metadata.
+- `executionModel` — Declares how the operation executes: `sync` returns a result immediately, `async` returns 202 with a polling location, `stream` returns 202 with stream metadata.
 - `frameSchema` — Schema describing each frame in a stream. Present only when `executionModel=stream`. Enables agents to understand frame structure before subscribing.
 - `supportedTransports` — Which transports a streaming operation can deliver over. The caller can express preference in `args`; the server picks the best match.
 - `supportedEncodings` — Which encodings are available for stream frames. Same negotiation as transports.
-- `ttlSeconds` — Default stream lifetime for this operation. The server adds this to the current time to compute `stream.expiresAt` (Unix epoch seconds) in the response envelope.
 - `frameIntegrity` — Whether stream frames include integrity headers (sequence number and checksum). Defaults to `false`. Recommended for safety-critical applications.
-- `resultTtlSeconds` — Optional. Default retention time for operation instances and their results. The server adds this to the current time to compute `expiresAt` (Unix epoch seconds) in responses. Omitted when retention is unlimited or managed externally.
+- `ttlSeconds` — Default lifetime for this operation. The server adds this to the current time to compute `expiresAt` (Unix epoch seconds) in the response envelope.
+  - For synchronous and asynchronous operations, this is the TTL for the operation instance and its result.
+  - For streaming operations, this is the default stream lifetime (time until `stream.expiresAt`), which the server can override per-subscription based on load or policy.
 
 ---
 
@@ -922,7 +947,8 @@ Servers SHOULD include `Cache-Control` and `ETag` headers on `/.well-known/ops` 
 
 - Each invocation creates an Operation Instance
 - Instance is managed by a state machine:
-  - accepted → pending → complete | streaming | error
+  - ( accepted → pending → complete | streaming ) | error
+- State transitions are forward-only: once a state has advanced, it MUST NOT regress to a previous state. Any state except `error` may transition to `error`. `error` and `complete` are terminal. `streaming` may transition to `complete` (stream ended normally) or `error` (stream failed).
 - State transitions are persisted
 - Results and chunks are materialized in a result store
 - Stream subscriptions are tracked as long-lived operation instances
