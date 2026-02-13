@@ -746,8 +746,8 @@ export const args = z.object({
       │                          │
       │         FAIL             │         FAIL
       └────────────────→─────────┴──────────────→ ┌──────────┐
-                                                   │  error   │
-                                                   └──────────┘
+                                                  │  error   │
+                                                  └──────────┘
 ```
 
 Events: `START` (begin execution), `PROGRESS` (work underway — optional, for logging), `COMPLETE` (result stored), `FAIL` (error occurred).
@@ -943,22 +943,26 @@ type AnalyticsAgent = {
 ### How data is captured
 
 **On `POST /auth` (human):**
+
 1. Auth handler mints the token as normal
 2. After success, upsert into `analytics_visitors`: match on IP + User-Agent combination (returning visitors get their existing row updated). Set `patronId`, `cardNumber`, `username`, `referrer` (from `Referer` header), `userAgent`, `ip`. Set `createdAt` if new, always update `updatedAt`.
 3. Store the `analytics_visitors.id` in the session alongside the token — the app server uses this to increment counters without additional lookups.
 
 **On `POST /auth/agent`:**
+
 1. Agent auth handler mints the token as normal
 2. Look up the `analytics_visitors` row by `cardNumber` (the patron who shared their card with the agent). If no visitor row exists for that card number, create one with minimal data.
 3. Insert into `analytics_agents`: link to `visitorId`, record `patronId`, `cardNumber`, `userAgent`, `ip`.
 4. Store the `analytics_agents.id` in the token metadata (in SQLite `auth_tokens` table) so it can be looked up on each API call.
 
 **On each proxied page request (app server):**
+
 1. App server resolves the session → gets the `analytics_visitors.id`
 2. Increment `pageViews` and update `updatedAt` on the visitor row
 3. This is a fire-and-forget UPDATE — no waiting for the DB write to complete before responding
 
 **On each `POST /call`:**
+
 1. Auth middleware resolves the token → gets the token type (`demo` or `agent`)
 2. For `demo` tokens: increment `apiCalls` on the visitor's `analytics_visitors` row
 3. For `agent` tokens: increment `apiCalls` on the agent's `analytics_agents` row

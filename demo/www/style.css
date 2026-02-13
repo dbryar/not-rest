@@ -1,0 +1,476 @@
+/* =============================================
+   OpenCALL Brochure Site — style.css
+   Teal / blue-grey color scheme, no purple.
+   ============================================= */
+
+/* ------ Custom Properties (Light) ------ */
+:root {
+  --color-bg: #f8f9fa;
+  --color-surface: #ffffff;
+  --color-text: #1a1a2e;
+  --color-text-muted: #5a5f72;
+  --color-border: #dde1e6;
+  --color-code-bg: #1e1e2e;
+  --color-code-text: #cdd6f4;
+  --color-code-label: #a6adc8;
+  --color-teal: #0d9488;
+  --color-teal-hover: #0a7a70;
+  --color-teal-light: #ccfbf1;
+  --color-link: #0d7377;
+  --color-table-alt: #f1f3f5;
+  --color-table-header: #e8ebed;
+  --color-card-bg: #ffffff;
+  --color-card-border: #dde1e6;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ------ Custom Properties (Dark) ------ */
+[data-theme="dark"] {
+  --color-bg: #0f1219;
+  --color-surface: #181c25;
+  --color-text: #e2e4e9;
+  --color-text-muted: #8b90a0;
+  --color-border: #2a2f3d;
+  --color-code-bg: #12141c;
+  --color-code-text: #cdd6f4;
+  --color-code-label: #6c7086;
+  --color-teal: #2dd4bf;
+  --color-teal-hover: #14b8a6;
+  --color-teal-light: rgba(45, 212, 191, 0.1);
+  --color-link: #5eead4;
+  --color-table-alt: #1c2029;
+  --color-table-header: #222738;
+  --color-card-bg: #181c25;
+  --color-card-border: #2a2f3d;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ------ Reset / Base ------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+a {
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+}
+
+pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.85rem;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ------ Layout ------ */
+header,
+main,
+footer {
+  max-width: 900px;
+  margin: 0 auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+/* ------ Navigation ------ */
+header {
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  font-size: 1.3rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.logo strong {
+  font-weight: 700;
+}
+
+.logo:hover {
+  text-decoration: none;
+  color: var(--color-teal);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.nav-links a {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.nav-links a:hover {
+  color: var(--color-teal);
+  text-decoration: none;
+}
+
+/* ------ Dark Mode Toggle ------ */
+#theme-toggle {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: var(--color-text-muted);
+  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
+}
+
+#theme-toggle:hover {
+  border-color: var(--color-teal);
+  color: var(--color-teal);
+  background-color: var(--color-teal-light);
+}
+
+/* Show/hide sun & moon icons */
+[data-theme="light"] .icon-dark,
+[data-theme="dark"] .icon-light {
+  display: none;
+}
+
+/* ------ Sections ------ */
+section {
+  padding: 3.5rem 0 2rem;
+}
+
+section + section {
+  border-top: 1px solid var(--color-border);
+}
+
+section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+}
+
+section p {
+  max-width: 720px;
+  color: var(--color-text-muted);
+  margin-bottom: 1.25rem;
+}
+
+/* ------ Hero ------ */
+.hero {
+  text-align: center;
+  padding: 4rem 0 3rem;
+  border-top: none;
+}
+
+.hero-comic {
+  margin-bottom: 2rem;
+}
+
+.hero-comic img {
+  max-width: 500px;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+}
+
+.comic-attr {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: 0.5rem;
+}
+
+.hero h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.hero .hero-description {
+  max-width: 620px;
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 1.05rem;
+  color: var(--color-text-muted);
+  margin-bottom: 2rem;
+}
+
+/* ------ Buttons ------ */
+.btn {
+  display: inline-block;
+  padding: 0.75rem 1.75rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  cursor: pointer;
+}
+
+.btn:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background-color: var(--color-teal);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-teal-hover);
+  color: #fff;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--color-teal);
+  border: 2px solid var(--color-teal);
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-teal);
+  color: #fff;
+}
+
+/* ------ Cards ------ */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.card {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+.card h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.6rem;
+  color: var(--color-text);
+}
+
+.card p {
+  font-size: 0.92rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0;
+}
+
+/* ------ Code Blocks ------ */
+.code-block-wrapper {
+  margin: 1.5rem 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.code-label {
+  background: var(--color-code-bg);
+  color: var(--color-code-label);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.5rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+pre {
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.25rem;
+  overflow-x: auto;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ------ Comparison Table ------ */
+.table-wrapper {
+  overflow-x: auto;
+  margin-top: 1.5rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  min-width: 640px;
+}
+
+thead th {
+  background: var(--color-table-header);
+  text-align: left;
+  padding: 0.85rem 1rem;
+  font-weight: 600;
+  border-bottom: 2px solid var(--color-border);
+}
+
+thead th:first-child {
+  width: 160px;
+}
+
+tbody td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+tbody tr:nth-child(even) {
+  background: var(--color-table-alt);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Highlight OpenCALL column */
+thead th:nth-child(2) {
+  color: var(--color-teal);
+}
+
+tbody td:nth-child(2) {
+  font-weight: 500;
+}
+
+/* ------ Footer ------ */
+footer {
+  padding: 2.5rem 1.5rem 3rem;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+
+footer p {
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+footer a {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+footer a:hover {
+  color: var(--color-teal);
+}
+
+/* ------ Responsive ------ */
+@media (max-width: 640px) {
+  .nav-links a:not(:last-child) {
+    display: none;
+  }
+
+  .hero h1 {
+    font-size: 1.5rem;
+  }
+
+  .hero .hero-description {
+    font-size: 0.95rem;
+  }
+
+  section h2 {
+    font-size: 1.4rem;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  table {
+    font-size: 0.82rem;
+  }
+
+  thead th,
+  tbody td {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  header,
+  main,
+  footer {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  section {
+    padding: 2.5rem 0 1.5rem;
+  }
+
+  .hero {
+    padding: 2.5rem 0 2rem;
+  }
+
+  pre {
+    padding: 1rem;
+    font-size: 0.8rem;
+  }
+}

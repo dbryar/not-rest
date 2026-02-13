@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenCALL &mdash; One Endpoint. Every Operation.</title>
+  <meta name="description" content="OpenCALL is a single-endpoint, operation-based API protocol that replaces sprawling REST surfaces with one POST /call endpoint.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header>
+    <nav>
+      <a href="#" class="logo">Open<strong>CALL</strong></a>
+      <div class="nav-links">
+        <a href="#problem">Problem</a>
+        <a href="#answer">Answer</a>
+        <a href="#try-it">Try It</a>
+        <a href="#compare">Compare</a>
+        <a href="#spec">Spec</a>
+        <button id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+          <span class="icon-light">&#9790;</span>
+          <span class="icon-dark">&#9788;</span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- Hero -->
+    <section class="hero" id="hero">
+      <div class="hero-comic">
+        <a href="https://xkcd.com/927/" target="_blank" rel="noopener noreferrer">
+          <img src="https://imgs.xkcd.com/comics/standards.png"
+               alt="XKCD 927: Standards"
+               width="500" height="283"
+               loading="eager">
+        </a>
+        <p class="comic-attr">
+          <a href="https://xkcd.com/927/" target="_blank" rel="noopener noreferrer">Randall Munroe / xkcd</a>, <a href="https://creativecommons.org/licenses/by-nc/2.5/" target="_blank" rel="noopener noreferrer">CC BY-NC 2.5</a>
+        </p>
+      </div>
+      <h1>Yes, we know. But hear us out.</h1>
+      <p class="hero-description">
+        <strong>OpenCALL</strong> is a single-endpoint, operation-based API protocol.
+        Instead of dozens of routes, verbs, and status codes, every request is a
+        <code>POST&nbsp;/call</code> carrying a typed operation name and its arguments.
+        The server responds with a predictable envelope&mdash;every time.
+      </p>
+      <a href="https://app.opencall-api.com" class="btn btn-primary">Try the Demo</a>
+    </section>
+
+    <!-- The Problem -->
+    <section id="problem">
+      <h2>The Problem</h2>
+      <div class="card-grid">
+        <div class="card">
+          <h3>Endpoint Sprawl</h3>
+          <p>
+            REST APIs grow into forests of URLs. <code>/users</code>,
+            <code>/users/:id/orders</code>, <code>/users/:id/orders/:oid/items</code>&mdash;each
+            with its own combination of HTTP verbs, query strings, and path
+            parameters. Clients need a map just to find the door.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Inconsistent Errors</h3>
+          <p>
+            One endpoint returns <code>{"error": "not found"}</code>. Another
+            returns <code>{"message": "Not Found", "code": 404}</code>. A third
+            returns an HTML error page. There is no standard error envelope, so
+            every integration is a special case.
+          </p>
+        </div>
+        <div class="card">
+          <h3>No Self-Description</h3>
+          <p>
+            REST APIs are opaque by default. Without a separately maintained
+            OpenAPI spec (which is often out of date), clients have no
+            machine-readable way to discover what operations exist, what
+            arguments they accept, or what they return.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- The Answer -->
+    <section id="answer">
+      <h2>The Answer</h2>
+      <p>
+        OpenCALL collapses every API surface into a single endpoint:
+        <code>POST&nbsp;/call</code>. Each request carries an <strong>operation
+        name</strong> and an <strong>arguments object</strong> inside a minimal
+        JSON envelope. The server always responds with a consistent structure
+        containing either a <code>result</code> or an <code>error</code>.
+      </p>
+      <div class="code-block-wrapper">
+        <div class="code-label">Request</div>
+        <pre><code>POST /call HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer &lt;token&gt;
+
+{
+  "op": "v1:catalog.list",
+  "args": {
+    "type": "book",
+    "limit": 10
+  }
+}</code></pre>
+      </div>
+      <p>
+        Operations are namespaced, versioned, and discoverable. The server can
+        describe every operation it supports&mdash;including argument schemas and
+        return types&mdash;through built-in introspection, no sidecar spec needed.
+      </p>
+    </section>
+
+    <!-- Try It -->
+    <section id="try-it">
+      <h2>Try It</h2>
+      <p>
+        The demo server is live. Paste the command below into your terminal to
+        make your first OpenCALL request:
+      </p>
+      <div class="code-block-wrapper">
+        <div class="code-label">curl</div>
+        <pre><code>curl -X POST https://api.opencall-api.com/call \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer demo_token" \
+  -d '{"op":"v1:catalog.list","args":{"limit":5}}'</code></pre>
+      </div>
+      <p>Or explore the interactive playground:</p>
+      <a href="https://app.opencall-api.com" class="btn btn-primary">Open the Demo App</a>
+    </section>
+
+    <!-- Compare -->
+    <section id="compare">
+      <h2>Compare</h2>
+      <p>See how OpenCALL stacks up against the protocols you already know.</p>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>OpenCALL</th>
+              <th>REST</th>
+              <th>GraphQL</th>
+              <th>gRPC</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Endpoint pattern</strong></td>
+              <td>Single <code>POST /call</code></td>
+              <td>Many verb + path combos</td>
+              <td>Single <code>POST /graphql</code></td>
+              <td>Per-service &amp; method</td>
+            </tr>
+            <tr>
+              <td><strong>Self-describing</strong></td>
+              <td>Built-in introspection</td>
+              <td>Requires OpenAPI sidecar</td>
+              <td>Built-in introspection</td>
+              <td>Reflection or .proto files</td>
+            </tr>
+            <tr>
+              <td><strong>Error model</strong></td>
+              <td>Consistent envelope with code, message, and details</td>
+              <td>Ad-hoc; varies per API</td>
+              <td>Partial data + errors array</td>
+              <td>Status codes + metadata</td>
+            </tr>
+            <tr>
+              <td><strong>Auth model</strong></td>
+              <td>Bearer token in header; scopes per operation</td>
+              <td>Varies (header, query, cookie)</td>
+              <td>Varies; often context-based</td>
+              <td>mTLS or token metadata</td>
+            </tr>
+            <tr>
+              <td><strong>Async support</strong></td>
+              <td>First-class polling &amp; callbacks</td>
+              <td>No standard pattern</td>
+              <td>Subscriptions (WebSocket)</td>
+              <td>Streaming (HTTP/2)</td>
+            </tr>
+            <tr>
+              <td><strong>Caching</strong></td>
+              <td>Operation-level cache hints</td>
+              <td>HTTP caching (GET only)</td>
+              <td>Difficult (POST-based)</td>
+              <td>No built-in HTTP caching</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Read the Spec -->
+    <section id="spec">
+      <h2>Read the Spec</h2>
+      <p>
+        The full OpenCALL protocol specification covers the envelope format,
+        operation naming conventions, error taxonomy, authentication model,
+        introspection, async patterns, and more.
+      </p>
+      <a href="https://github.com/dbryar/call-api/blob/main/specification.md" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">
+        Read the Specification &rarr;
+      </a>
+    </section>
+
+    <!-- Read the Client Guide -->
+    <section id="client-guide">
+      <h2>Read the Client Guide</h2>
+      <p>
+        The client guide walks through building an OpenCALL client from scratch:
+        constructing requests, handling responses, authentication, error recovery,
+        and best practices for production use.
+      </p>
+      <a href="https://github.com/dbryar/call-api/blob/main/client.md" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">
+        Read the Client Guide &rarr;
+      </a>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/dbryar/call-api" target="_blank" rel="noopener noreferrer">GitHub</a>
+      &middot; Built by one person who got tired of mapping verbs to URLs.
+      &middot; <a href="https://medium.com/@dbryar" target="_blank" rel="noopener noreferrer">Blog</a>
+    </p>
+  </footer>
+
+  <script>
+    (function () {
+      var toggle = document.getElementById('theme-toggle');
+      var root = document.documentElement;
+
+      function getCookie(name) {
+        var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        return match ? match[2] : null;
+      }
+
+      function setCookie(name, value) {
+        document.cookie = name + '=' + value + ';path=/;max-age=31536000;SameSite=Lax';
+      }
+
+      var saved = getCookie('theme');
+      if (saved === 'dark' || saved === 'light') {
+        root.setAttribute('data-theme', saved);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        root.setAttribute('data-theme', 'dark');
+      }
+
+      toggle.addEventListener('click', function () {
+        var current = root.getAttribute('data-theme');
+        var next = current === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        setCookie('theme', next);
+      });
+    })();
+  </script>
+
+</body>
+</html>
