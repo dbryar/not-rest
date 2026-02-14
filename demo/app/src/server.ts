@@ -84,7 +84,7 @@ export function startServer() {
   // Initialize the session database on startup
   getDb();
 
-  const port = parseInt(process.env.APP_PORT || "8000", 10);
+  const port = parseInt(process.env.PORT || process.env.APP_PORT || "8000", 10);
 
   const server = Bun.serve({
     port,

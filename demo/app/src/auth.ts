@@ -75,8 +75,8 @@ export function handleAuthPage(req: Request): Response {
   <title>Sign In - OpenCALL Demo Library</title>
   <link rel="stylesheet" href="/app.css">
 </head>
-<body class="auth-page">
-  <main class="auth-container">
+<body>
+  <main class="auth-layout">
     <div class="auth-card">
       <div class="auth-header">
         <h1>OpenCALL Demo Library</h1>
@@ -107,7 +107,11 @@ export function handleAuthPage(req: Request): Response {
           </label>
           <label class="checkbox-label">
             <input type="checkbox" name="scopes" value="items:write" checked>
-            <span>items:write</span> <span class="scope-desc">- Reserve and return items</span>
+            <span>items:write</span> <span class="scope-desc">- Reserve items</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="scopes" value="items:checkin" checked>
+            <span>items:checkin</span> <span class="scope-desc">- Return / check in items</span>
           </label>
           <label class="checkbox-label">
             <input type="checkbox" name="scopes" value="patron:read" checked>

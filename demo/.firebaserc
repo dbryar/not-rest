@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "opencall-api"
+  },
+  "targets": {
+    "opencall-api": {
+      "hosting": {
+        "www": [
+          "opencall-web"
+        ],
+        "agents": [
+          "opencall-agent"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

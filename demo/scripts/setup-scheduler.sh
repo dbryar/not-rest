@@ -5,19 +5,45 @@ set -euo pipefail
 # OpenCALL Demo — Cloud Scheduler Setup
 # Creates a scheduled job to reset the demo database every 4 hours.
 #
-# Target:  POST https://api.opencall-api.com/admin/reset
+# Target:  POST <cloud-run-api-url>/admin/reset
 # Cron:    0 */4 * * *   (every 4 hours on the hour)
 # Auth:    Authorization: Bearer {ADMIN_SECRET}
 # Retry:   1 retry, 60s backoff
 # ============================================================================
 
-PROJECT_ID="${GCS_PROJECT_ID:?Set GCS_PROJECT_ID}"
-REGION="${CLOUD_RUN_REGION:-australia-southeast1}"
-ADMIN_SECRET="${ADMIN_SECRET:?Set ADMIN_SECRET}"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Load .env if present
+if [ -f "${REPO_ROOT}/.env" ]; then
+  set -a
+  source "${REPO_ROOT}/.env"
+  set +a
+fi
+
+PROJECT_ID="${GCS_PROJECT_ID:-opencall-api}"
+REGION="${CLOUD_RUN_REGION:-us-central1}"
+
+# Fetch secret from GCP Secret Manager if not already set
+if [ -z "${ADMIN_SECRET:-}" ]; then
+  echo "--- Fetching ADMIN_SECRET from Secret Manager ---"
+  ADMIN_SECRET="$(gcloud secrets versions access latest \
+    --secret=ADMIN_SECRET --project="${PROJECT_ID}")"
+fi
+
+# Resolve the Cloud Run API URL dynamically
+API_URL="${API_URL:-$(gcloud run services describe opencall-api \
+  --project "${PROJECT_ID}" \
+  --region "${REGION}" \
+  --format 'value(status.url)' 2>/dev/null || echo "")}"
+
+if [ -z "${API_URL}" ]; then
+  echo "ERROR: Could not resolve API URL. Deploy the API first or set API_URL." >&2
+  exit 1
+fi
 
 JOB_NAME="opencall-demo-db-reset"
 SCHEDULE="0 */4 * * *"
-TARGET_URL="https://api.opencall-api.com/admin/reset"
+TARGET_URL="${API_URL}/admin/reset"
 TIME_ZONE="UTC"
 
 echo "==> Creating Cloud Scheduler job: ${JOB_NAME}"

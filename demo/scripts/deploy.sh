@@ -3,55 +3,63 @@ set -euo pipefail
 
 # ============================================================================
 # OpenCALL Demo — Full Deployment Script
-# Deploys all 4 subdomains to GCP:
-#   - api.opencall-api.com  → Cloud Run  (demo/api)
-#   - app.opencall-api.com  → Cloud Run  (demo/app)
-#   - www.opencall-api.com  → Firebase Hosting (demo/www)
-#   - agents.opencall-api.com → Firebase Hosting (demo/agents)
+# Deploys all 4 services to GCP project "opencall-api":
+#   - opencall-api   → Cloud Run  (demo/api)
+#   - opencall-app   → Cloud Run  (demo/app)
+#   - opencall-web   → Firebase Hosting (demo/www)
+#   - opencall-agent → Firebase Hosting (demo/agents)
 # ============================================================================
 
 # ---------------------------------------------------------------------------
-# Configuration — override via environment or .env
+# Configuration — override via environment or .env file in demo/
 # ---------------------------------------------------------------------------
-PROJECT_ID="${GCS_PROJECT_ID:?Set GCS_PROJECT_ID}"
-REGION="${CLOUD_RUN_REGION:-australia-southeast1}"
-GCS_BUCKET="${GCS_BUCKET:?Set GCS_BUCKET}"
-ADMIN_SECRET="${ADMIN_SECRET:?Set ADMIN_SECRET}"
-COOKIE_SECRET="${COOKIE_SECRET:?Set COOKIE_SECRET}"
-
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-API_IMAGE="gcr.io/${PROJECT_ID}/opencall-demo-api"
-APP_IMAGE="gcr.io/${PROJECT_ID}/opencall-demo-app"
+
+# Load .env if present (does not override existing env vars)
+if [ -f "${REPO_ROOT}/.env" ]; then
+  set -a
+  source "${REPO_ROOT}/.env"
+  set +a
+fi
+
+PROJECT_ID="${GCS_PROJECT_ID:-opencall-api}"
+REGION="${CLOUD_RUN_REGION:-us-central1}"
+GCS_BUCKET="${GCS_BUCKET:-opencall-demo-covers}"
+
+# Fetch secrets from GCP Secret Manager if not already set
+if [ -z "${ADMIN_SECRET:-}" ]; then
+  echo "--- Fetching ADMIN_SECRET from Secret Manager ---"
+  ADMIN_SECRET="$(gcloud secrets versions access latest \
+    --secret=ADMIN_SECRET --project="${PROJECT_ID}")"
+fi
+if [ -z "${COOKIE_SECRET:-}" ]; then
+  echo "--- Fetching COOKIE_SECRET from Secret Manager ---"
+  COOKIE_SECRET="$(gcloud secrets versions access latest \
+    --secret=COOKIE_SECRET --project="${PROJECT_ID}")"
+fi
 
 echo "==> Project: ${PROJECT_ID}  Region: ${REGION}"
 echo "==> Repo root: ${REPO_ROOT}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 1. Build & deploy API to Cloud Run (api.opencall-api.com)
+# 1. Deploy API to Cloud Run
 # ---------------------------------------------------------------------------
-echo "--- Building API image ---"
-gcloud builds submit "${REPO_ROOT}/api" \
-  --tag "${API_IMAGE}" \
-  --project "${PROJECT_ID}" \
-  --quiet
-
 echo "--- Deploying API to Cloud Run ---"
-gcloud run deploy opencall-demo-api \
-  --image "${API_IMAGE}" \
+gcloud run deploy opencall-api \
+  --source "${REPO_ROOT}/api" \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
-  --platform managed \
   --allow-unauthenticated \
   --port 8080 \
   --memory 512Mi \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 3 \
-  --set-env-vars "GCS_BUCKET=${GCS_BUCKET},GCS_PROJECT_ID=${PROJECT_ID},ADMIN_SECRET=${ADMIN_SECRET},APP_URL=${APP_URL:-https://app.opencall-api.com},PORT=8080" \
+  --set-env-vars "GCS_BUCKET=${GCS_BUCKET},GCS_PROJECT_ID=${PROJECT_ID},ADMIN_SECRET=${ADMIN_SECRET}" \
   --quiet
 
-API_URL="$(gcloud run services describe opencall-demo-api \
+API_URL="$(gcloud run services describe opencall-api \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
   --format 'value(status.url)')"
@@ -60,30 +68,23 @@ echo "==> API deployed at: ${API_URL}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 2. Build & deploy App to Cloud Run (app.opencall-api.com)
+# 2. Deploy App to Cloud Run (needs API_URL from step 1)
 # ---------------------------------------------------------------------------
-echo "--- Building App image ---"
-gcloud builds submit "${REPO_ROOT}/app" \
-  --tag "${APP_IMAGE}" \
-  --project "${PROJECT_ID}" \
-  --quiet
-
 echo "--- Deploying App to Cloud Run ---"
-gcloud run deploy opencall-demo-app \
-  --image "${APP_IMAGE}" \
+gcloud run deploy opencall-app \
+  --source "${REPO_ROOT}/app" \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
-  --platform managed \
   --allow-unauthenticated \
   --port 8080 \
   --memory 512Mi \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 3 \
-  --set-env-vars "API_URL=${API_URL},COOKIE_SECRET=${COOKIE_SECRET},PORT=8080,AGENTS_URL=https://agents.opencall-api.com,WWW_URL=https://www.opencall-api.com" \
+  --set-env-vars "API_URL=${API_URL},COOKIE_SECRET=${COOKIE_SECRET},AGENTS_URL=https://opencall-agent.web.app,WWW_URL=https://opencall-web.web.app" \
   --quiet
 
-APP_URL="$(gcloud run services describe opencall-demo-app \
+APP_URL="$(gcloud run services describe opencall-app \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
   --format 'value(status.url)')"
@@ -91,44 +92,34 @@ APP_URL="$(gcloud run services describe opencall-demo-app \
 echo "==> App deployed at: ${APP_URL}"
 echo ""
 
-# ---------------------------------------------------------------------------
-# 3. Deploy brochure site to Firebase Hosting (www.opencall-api.com)
-# ---------------------------------------------------------------------------
-echo "--- Deploying brochure site (www) to Firebase Hosting ---"
-cd "${REPO_ROOT}/www"
-
-# Build static assets if a build script exists
-if [ -f package.json ] && grep -q '"build"' package.json; then
-  bun install
-  bun run build
-fi
-
-firebase deploy \
-  --only hosting:www \
+# Update API with the now-known APP_URL
+echo "--- Updating API with APP_URL ---"
+gcloud run services update opencall-api \
   --project "${PROJECT_ID}" \
-  --non-interactive
+  --region "${REGION}" \
+  --update-env-vars "APP_URL=${APP_URL}" \
+  --quiet
 
-echo "==> Brochure site deployed to www.opencall-api.com"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 4. Deploy agents site to Firebase Hosting (agents.opencall-api.com)
+# 3. Build static sites (template replacement → dist/)
 # ---------------------------------------------------------------------------
-echo "--- Deploying agents site to Firebase Hosting ---"
-cd "${REPO_ROOT}/agents"
+echo "--- Building static sites ---"
+APP_URL="${APP_URL}" API_URL="${API_URL}" bash "${REPO_ROOT}/www/build.sh"
+API_URL="${API_URL}" bash "${REPO_ROOT}/agents/build.sh"
+echo ""
 
-# Build static assets if a build script exists
-if [ -f package.json ] && grep -q '"build"' package.json; then
-  bun install
-  bun run build
-fi
-
+# ---------------------------------------------------------------------------
+# 4. Deploy both hosting sites from demo/ directory
+# ---------------------------------------------------------------------------
+echo "--- Deploying to Firebase Hosting ---"
+cd "${REPO_ROOT}"
 firebase deploy \
-  --only hosting:agents \
+  --only hosting \
   --project "${PROJECT_ID}" \
   --non-interactive
 
-echo "==> Agents site deployed to agents.opencall-api.com"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -137,8 +128,8 @@ echo ""
 echo "============================================"
 echo " Deployment complete!"
 echo ""
-echo "  API:     https://api.opencall-api.com"
-echo "  App:     https://app.opencall-api.com"
-echo "  WWW:     https://www.opencall-api.com"
-echo "  Agents:  https://agents.opencall-api.com"
+echo "  API:     ${API_URL}"
+echo "  App:     ${APP_URL}"
+echo "  WWW:     https://opencall-web.web.app"
+echo "  Agents:  https://opencall-agent.web.app"
 echo "============================================"
