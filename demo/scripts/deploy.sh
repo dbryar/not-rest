@@ -52,7 +52,7 @@ gcloud run deploy opencall-api \
   --region "${REGION}" \
   --allow-unauthenticated \
   --port 8080 \
-  --memory 512Mi \
+  --memory 256Mi \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 3 \
@@ -77,11 +77,11 @@ gcloud run deploy opencall-app \
   --region "${REGION}" \
   --allow-unauthenticated \
   --port 8080 \
-  --memory 512Mi \
+  --memory 256Mi \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 3 \
-  --set-env-vars "API_URL=${API_URL},COOKIE_SECRET=${COOKIE_SECRET},AGENTS_URL=https://opencall-agent.web.app,WWW_URL=https://opencall-web.web.app" \
+  --set-env-vars "API_URL=${API_URL},COOKIE_SECRET=${COOKIE_SECRET},AGENTS_URL=${AGENTS_URL:-https://agents.opencall-api.com},WWW_URL=${WWW_URL:-https://www.opencall-api.com}" \
   --quiet
 
 APP_URL="$(gcloud run services describe opencall-app \
@@ -130,6 +130,6 @@ echo " Deployment complete!"
 echo ""
 echo "  API:     ${API_URL}"
 echo "  App:     ${APP_URL}"
-echo "  WWW:     https://opencall-web.web.app"
-echo "  Agents:  https://opencall-agent.web.app"
+echo "  WWW:     ${WWW_URL:-https://www.opencall-api.com}"
+echo "  Agents:  ${AGENTS_URL:-https://agents.opencall-api.com}"
 echo "============================================"

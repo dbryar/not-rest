@@ -36,7 +36,8 @@ function layout(page: string, title: string, content: string, session: Session):
   <div class="layout">
     <!-- Sidebar Navigation -->
     <nav class="layout-sidebar" id="sidebar">
-      <a href="/" class="sidebar-logo">OpenCALL<br><span class="text-muted text-sm">Demo Library</span></a>
+      <a href="${WWW_URL}" target="_blank" rel="noopener" class="sidebar-logo">OpenCALL<br />
+      <span class="text-muted text-sm">Demo Library</span></a>
 
       <div class="sidebar-nav">
         <a href="/" class="nav-link${page === "dashboard" ? " active" : ""}">
@@ -60,7 +61,6 @@ function layout(page: string, title: string, content: string, session: Session):
       </a>
 
       <div class="sidebar-footer">
-        <a href="${WWW_URL}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">About OpenCALL</a>
         <a href="/logout" class="btn btn-sm btn-outline">Sign Out</a>
         <button class="theme-toggle" aria-label="Toggle theme">
           <span class="icon-light">&#9790;</span>

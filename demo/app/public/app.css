@@ -22,8 +22,8 @@
   --danger-light: rgba(220, 53, 69, 0.1);
   --border: #dee2e6;
   --border-focus: #86b7fe;
-  --code-bg: #1e1e1e;
-  --code-text: #d4d4d4;
+  --code-bg: #f5f5f5;
+  --code-text: #333;
   --radius: 8px;
   --radius-sm: 4px;
   --radius-lg: 12px;
@@ -945,7 +945,7 @@ select.input {
 .envelope-viewer .copy-btn {
   padding: 0.25rem 0.5rem;
   font-size: 0.7rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-secondary);
   color: var(--code-text);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-sm);
@@ -964,7 +964,7 @@ select.input {
 }
 
 .envelope-viewer .copy-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bg-tertiary);
 }
 
 .envelope-viewer .copy-btn.copied {
@@ -1292,7 +1292,12 @@ select.input {
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.layout-sidebar .sidebar-footer .theme-toggle {
+  margin-left: auto;
 }
 
 /* ------ Nav Links ------ */
@@ -1368,51 +1373,181 @@ select.input {
 /* ------ Auth Layout ------ */
 .auth-layout {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
   padding: 2rem;
-  background: var(--bg-secondary);
+  background: #2a2a2e;
 }
 
 .auth-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: 2rem;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  padding: 2.5rem;
   width: 100%;
-  max-width: 480px;
+  max-width: 420px;
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
 }
 
 .auth-card h1 {
   font-size: 1.5rem;
   margin-bottom: 0.25rem;
+  color: #1a1a1a;
 }
 
 .auth-card .auth-subtitle {
-  color: var(--text-secondary);
+  color: #666;
   font-size: 0.9rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0;
 }
 
 .auth-card .form-group {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
-.auth-card .form-group label {
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.35rem;
-}
-
-.auth-card .auth-submit {
+.auth-card .form-group input[type="text"] {
   width: 100%;
-  margin-top: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  color: #1a1a1a;
+  background: #fafafa;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.auth-card .form-group input[type="text"]:focus {
+  outline: none;
+  border-color: #4a7cff;
+  background: #fff;
+}
+
+.auth-card .form-group input[type="text"]::placeholder {
+  color: #aaa;
+}
+
+/* Scope toggles */
+.scope-section {
+  margin-bottom: 1.5rem;
+}
+
+.scope-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #999;
+  margin-bottom: 0.6rem;
+}
+
+.scope-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  cursor: pointer;
+}
+
+.scope-row + .scope-row {
+  border-top: 1px solid #f0f0f0;
+}
+
+.scope-label {
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: #ccc;
+  border-radius: 11px;
+  transition: background 0.2s;
+}
+
+.toggle-track::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.toggle input:checked + .toggle-track {
+  background: #4a7cff;
+}
+
+.toggle input:checked + .toggle-track::before {
+  transform: translateX(18px);
+}
+
+/* Sign-in button */
+.btn-signin {
+  display: block;
+  margin: 0 auto;
+  min-width: 200px;
+  padding: 0.7rem 2rem;
+  border: none;
+  border-radius: 9999px;
+  background: #4a7cff;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn-signin:hover {
+  background: #3a67e0;
+}
+
+.btn-signin.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Disclaimer below card */
+.auth-disclaimer {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.auth-disclaimer p {
+  margin: 0.2rem 0;
+}
+
+.auth-disclaimer a {
+  color: rgba(255, 255, 255, 0.35);
+  text-decoration: underline;
 }
 
 /* ------ Theme Toggle ------ */

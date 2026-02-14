@@ -88,58 +88,77 @@ export function handleAuthPage(req: Request): Response {
 
       <form method="POST" action="/auth" class="auth-form">
         <div class="form-group">
-          <label for="username">Username <span class="optional">(optional)</span></label>
-          <input type="text" id="username" name="username" placeholder="Leave blank for a random name"
+          <input type="text" id="username" name="username" placeholder="Enter a username or leave blank"
                  pattern="[a-z0-9\\-]+" title="Lowercase letters, numbers, and hyphens only">
-          <p class="form-hint">A library patron will be created for you with overdue items to explore.</p>
         </div>
 
-        <fieldset class="form-group">
-          <legend>API Scopes</legend>
-          <p class="form-hint">Select which permissions your demo token should have:</p>
+        <div class="scope-section">
+          <div class="scope-section-label">Permissions</div>
 
-          <label class="checkbox-label">
-            <input type="checkbox" name="scopes" value="items:browse" checked>
-            <span>items:browse</span> <span class="scope-desc">- Search and list catalog items</span>
+          <label class="scope-row">
+            <span class="scope-label">Browse catalog</span>
+            <span class="toggle">
+              <input type="checkbox" name="scopes" value="items:browse" checked>
+              <span class="toggle-track"></span>
+            </span>
           </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="scopes" value="items:read" checked>
-            <span>items:read</span> <span class="scope-desc">- View item details and media</span>
+          <label class="scope-row">
+            <span class="scope-label">View items</span>
+            <span class="toggle">
+              <input type="checkbox" name="scopes" value="items:read" checked>
+              <span class="toggle-track"></span>
+            </span>
           </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="scopes" value="items:write" checked>
-            <span>items:write</span> <span class="scope-desc">- Reserve items</span>
+          <label class="scope-row">
+            <span class="scope-label">Reserve items</span>
+            <span class="toggle">
+              <input type="checkbox" name="scopes" value="items:write" checked>
+              <span class="toggle-track"></span>
+            </span>
           </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="scopes" value="items:checkin" checked>
-            <span>items:checkin</span> <span class="scope-desc">- Return / check in items</span>
+          <label class="scope-row">
+            <span class="scope-label">Return items</span>
+            <span class="toggle">
+              <input type="checkbox" name="scopes" value="items:checkin" checked>
+              <span class="toggle-track"></span>
+            </span>
           </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="scopes" value="patron:read" checked>
-            <span>patron:read</span> <span class="scope-desc">- View your patron profile and history</span>
+          <label class="scope-row">
+            <span class="scope-label">View profile</span>
+            <span class="toggle">
+              <input type="checkbox" name="scopes" value="patron:read" checked>
+              <span class="toggle-track"></span>
+            </span>
           </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="scopes" value="reports:generate" checked>
-            <span>reports:generate</span> <span class="scope-desc">- Generate library reports</span>
+          <label class="scope-row">
+            <span class="scope-label">Generate reports</span>
+            <span class="toggle">
+              <input type="checkbox" name="scopes" value="reports:generate" checked>
+              <span class="toggle-track"></span>
+            </span>
           </label>
-        </fieldset>
+        </div>
 
-        <button type="submit" class="btn btn-primary">Sign In &amp; Get Library Card</button>
+        <button type="submit" class="btn-signin">Sign In</button>
       </form>
+    </div>
 
-      <div class="auth-footer">
-        <p>This is a demo environment. Data resets periodically.</p>
-        <p>Explore the <a href="${AGENTS_URL}" target="_blank" rel="noopener">API documentation</a> to learn more.</p>
-      </div>
+    <div class="auth-disclaimer">
+      <p>This is a demo environment. Data resets periodically.</p>
+      <p><a href="${AGENTS_URL}" target="_blank" rel="noopener">API documentation</a></p>
     </div>
   </main>
   <script src="/app.js"></script>
   <script>
-    // Handle auth form submission via JavaScript to get token
     document.querySelector('.auth-form').addEventListener('submit', async function(e) {
       e.preventDefault();
 
       const form = e.target;
+      const btn = form.querySelector('.btn-signin');
+      btn.classList.add('loading');
+      btn.disabled = true;
+      btn.textContent = 'Signing in\u2026';
+
       const username = form.querySelector('#username').value.trim();
       const scopeCheckboxes = form.querySelectorAll('input[name="scopes"]:checked');
       const scopes = Array.from(scopeCheckboxes).map(cb => cb.value);
@@ -156,13 +175,15 @@ export function handleAuthPage(req: Request): Response {
         });
 
         if (!res.ok) {
+          btn.classList.remove('loading');
+          btn.disabled = false;
+          btn.textContent = 'Sign In';
           alert('Authentication failed. Please try again.');
           return;
         }
 
         const data = await res.json();
 
-        // Store in sessionStorage for direct API calls
         sessionStorage.setItem('opencall_token', data.token);
         sessionStorage.setItem('opencall_api_url', data.apiUrl);
         sessionStorage.setItem('opencall_user', JSON.stringify({
@@ -172,10 +193,12 @@ export function handleAuthPage(req: Request): Response {
           expiresAt: data.expiresAt,
         }));
 
-        // Redirect to dashboard
         window.location.href = '/';
       } catch (err) {
         console.error('Auth error:', err);
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
         alert('Authentication failed. Please try again.');
       }
     });

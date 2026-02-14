@@ -15,7 +15,7 @@
       <div class="nav-links">
         <a href="#problem">Problem</a>
         <a href="#answer">Answer</a>
-        <a href="#try-it">Try It</a>
+        <a href="#try-it">Why Now</a>
         <a href="#compare">Compare</a>
         <a href="#spec">Spec</a>
         <button id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
@@ -30,25 +30,13 @@
 
     <!-- Hero -->
     <section class="hero" id="hero">
-      <div class="hero-comic">
-        <a href="https://xkcd.com/927/" target="_blank" rel="noopener noreferrer">
-          <img src="assets/xkcd-927.png"
-               alt="XKCD 927: Standards"
-               width="500" height="283"
-               loading="eager">
-        </a>
-        <p class="comic-attr">
-          <a href="https://xkcd.com/927/" target="_blank" rel="noopener noreferrer">Randall Munroe / xkcd</a>, <a href="https://creativecommons.org/licenses/by-nc/2.5/" target="_blank" rel="noopener noreferrer">CC BY-NC 2.5</a>
-        </p>
-      </div>
-      <h1>Yes, we know. But hear us out.</h1>
+      <h1>OpenCALL &mdash; Command And Lifecycle Layer</h1>
       <p class="hero-description">
-        <strong>OpenCALL</strong> is a single-endpoint, operation-based API protocol.
+        A single-endpoint, operation-based API protocol.
         Instead of dozens of routes, verbs, and status codes, every request is a
         <code>POST&nbsp;/call</code> carrying a typed operation name and its arguments.
         The server responds with a predictable envelope&mdash;every time.
       </p>
-      <a href="{{APP_URL}}" class="btn btn-primary">Try the Demo</a>
     </section>
 
     <!-- The Problem -->
@@ -82,7 +70,18 @@
             arguments they accept, or what they return.
           </p>
         </div>
+        <div class="card">
+          <h3>Agents Deserve Better</h3>
+          <p>
+            AI agents today are forced to navigate web pages built for humans,
+            burning tokens on HTML parsing, scraping forms, and guessing at
+            UI flows. Developers spend weeks building translation layers
+            between human-focused interfaces and agent-focused actions.
+            The data is right there&mdash;behind a wall of markup.
+          </p>
+        </div>
       </div>
+
     </section>
 
     <!-- The Answer -->
@@ -116,12 +115,32 @@ Authorization: Bearer &lt;token&gt;
       </p>
     </section>
 
-    <!-- Try It -->
+    <!-- Yes, we know -->
     <section id="try-it">
-      <h2>Try It</h2>
+      <figure class="xkcd-figure">
+        <a href="https://xkcd.com/927/" target="_blank" rel="noopener noreferrer">
+          <img src="assets/xkcd-927.png" alt="XKCD 927: Standards" width="500" height="283">
+        </a>
+        <figcaption>
+          <a href="https://xkcd.com/927/" target="_blank" rel="noopener noreferrer">Randall Munroe / xkcd</a>, <a href="https://creativecommons.org/licenses/by-nc/2.5/" target="_blank" rel="noopener noreferrer">CC BY-NC 2.5</a>
+        </figcaption>
+      </figure>
+      <h2>Yes, we know. But hear us out.</h2>
       <p>
-        The demo server is live. Paste the command below into your terminal to
-        make your first OpenCALL request:
+        The world doesn&rsquo;t need another protocol for the sake of it. But the world
+        has changed. Agents aren&rsquo;t a future concern&mdash;they&rsquo;re calling your API
+        right now, and they&rsquo;re doing it by scraping HTML, parsing screenshots,
+        and burning thousands of tokens just to click a button.
+      </p>
+      <p>
+        OpenCALL gives humans and agents the same interface. One endpoint, typed
+        operations, self-describing capabilities. An agent can discover what&rsquo;s
+        available, call it directly, and get structured data back&mdash;no browser
+        automation, no token-expensive page parsing, no translation layer between
+        what the human sees and what the agent needs.
+      </p>
+      <p>
+        Don&rsquo;t take our word for it. The demo server is live:
       </p>
       <div class="code-block-wrapper">
         <div class="code-label">curl</div>
@@ -278,7 +297,6 @@ Authorization: Bearer &lt;token&gt;
   <footer>
     <p>
       <a href="https://github.com/dbryar/call-api" target="_blank" rel="noopener noreferrer">GitHub</a>
-      &middot; Built by one person who got tired of mapping verbs to URLs.
       &middot; <a href="https://medium.com/@dbryar" target="_blank" rel="noopener noreferrer">Blog</a>
     </p>
   </footer>
