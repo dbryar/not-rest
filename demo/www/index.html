@@ -32,7 +32,7 @@
     <section class="hero" id="hero">
       <div class="hero-comic">
         <a href="https://xkcd.com/927/" target="_blank" rel="noopener noreferrer">
-          <img src="https://imgs.xkcd.com/comics/standards.png"
+          <img src="assets/xkcd-927.png"
                alt="XKCD 927: Standards"
                width="500" height="283"
                loading="eager">
@@ -48,7 +48,7 @@
         <code>POST&nbsp;/call</code> carrying a typed operation name and its arguments.
         The server responds with a predictable envelope&mdash;every time.
       </p>
-      <a href="https://app.opencall-api.com" class="btn btn-primary">Try the Demo</a>
+      <a href="{{APP_URL}}" class="btn btn-primary">Try the Demo</a>
     </section>
 
     <!-- The Problem -->
@@ -125,13 +125,13 @@ Authorization: Bearer &lt;token&gt;
       </p>
       <div class="code-block-wrapper">
         <div class="code-label">curl</div>
-        <pre><code>curl -X POST https://api.opencall-api.com/call \
+        <pre><code>curl -X POST {{API_URL}}/call \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer demo_token" \
   -d '{"op":"v1:catalog.list","args":{"limit":5}}'</code></pre>
       </div>
       <p>Or explore the interactive playground:</p>
-      <a href="https://app.opencall-api.com" class="btn btn-primary">Open the Demo App</a>
+      <a href="{{APP_URL}}" class="btn btn-primary">Open the Demo App</a>
     </section>
 
     <!-- Compare -->
@@ -147,6 +147,10 @@ Authorization: Bearer &lt;token&gt;
               <th>REST</th>
               <th>GraphQL</th>
               <th>gRPC</th>
+              <th>JSON-RPC</th>
+              <th>SOAP</th>
+              <th>MCP</th>
+              <th>A2A</th>
             </tr>
           </thead>
           <tbody>
@@ -156,6 +160,10 @@ Authorization: Bearer &lt;token&gt;
               <td>Many verb + path combos</td>
               <td>Single <code>POST /graphql</code></td>
               <td>Per-service &amp; method</td>
+              <td>Single endpoint</td>
+              <td>Single endpoint</td>
+              <td>Single endpoint</td>
+              <td>Single endpoint</td>
             </tr>
             <tr>
               <td><strong>Self-describing</strong></td>
@@ -163,6 +171,10 @@ Authorization: Bearer &lt;token&gt;
               <td>Requires OpenAPI sidecar</td>
               <td>Built-in introspection</td>
               <td>Reflection or .proto files</td>
+              <td>No</td>
+              <td>WSDL</td>
+              <td>Yes</td>
+              <td>Yes</td>
             </tr>
             <tr>
               <td><strong>Error model</strong></td>
@@ -170,6 +182,10 @@ Authorization: Bearer &lt;token&gt;
               <td>Ad-hoc; varies per API</td>
               <td>Partial data + errors array</td>
               <td>Status codes + metadata</td>
+              <td>Structured error object</td>
+              <td>Fault element</td>
+              <td>Structured</td>
+              <td>Structured</td>
             </tr>
             <tr>
               <td><strong>Auth model</strong></td>
@@ -177,6 +193,10 @@ Authorization: Bearer &lt;token&gt;
               <td>Varies (header, query, cookie)</td>
               <td>Varies; often context-based</td>
               <td>mTLS or token metadata</td>
+              <td>Out of band</td>
+              <td>WS-Security</td>
+              <td>OAuth / tokens</td>
+              <td>OAuth / tokens</td>
             </tr>
             <tr>
               <td><strong>Async support</strong></td>
@@ -184,6 +204,32 @@ Authorization: Bearer &lt;token&gt;
               <td>No standard pattern</td>
               <td>Subscriptions (WebSocket)</td>
               <td>Streaming (HTTP/2)</td>
+              <td>No</td>
+              <td>No</td>
+              <td>No</td>
+              <td>No</td>
+            </tr>
+            <tr>
+              <td><strong>Human + Agent</strong></td>
+              <td>Yes</td>
+              <td>Manual</td>
+              <td>Manual</td>
+              <td>No</td>
+              <td>No</td>
+              <td>No</td>
+              <td>Agent only</td>
+              <td>Agent only</td>
+            </tr>
+            <tr>
+              <td><strong>Chunked results</strong></td>
+              <td>Yes</td>
+              <td>No</td>
+              <td>No</td>
+              <td>Yes (streaming)</td>
+              <td>No</td>
+              <td>No</td>
+              <td>No</td>
+              <td>No</td>
             </tr>
             <tr>
               <td><strong>Caching</strong></td>
@@ -191,6 +237,10 @@ Authorization: Bearer &lt;token&gt;
               <td>HTTP caching (GET only)</td>
               <td>Difficult (POST-based)</td>
               <td>No built-in HTTP caching</td>
+              <td>No</td>
+              <td>No</td>
+              <td>No</td>
+              <td>No</td>
             </tr>
           </tbody>
         </table>

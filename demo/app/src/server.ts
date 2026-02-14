@@ -1,14 +1,14 @@
 import { getDb } from "./db/connection.ts";
 import { resolveSession, handleAuthPage, handleAuthSubmit, handleLogout } from "./auth.ts";
 import { clearAllSessions } from "./session.ts";
-import { proxyCall, proxyAgentAuth } from "./proxy.ts";
 import { renderDashboard, renderCatalog, renderItem, renderAccount, renderReports } from "./pages.ts";
 import { join, dirname } from "node:path";
 import type { Session } from "./session.ts";
 
-const AI_INSTRUCTIONS_URL = "https://agents.opencall-api.com/";
+const AGENTS_URL = process.env.AGENTS_URL || "http://localhost:3003";
+const WWW_URL = process.env.WWW_URL || "http://localhost:3002";
 const PUBLIC_DIR = join(dirname(new URL(import.meta.url).pathname), "..", "public");
-const API_URL = process.env.API_URL || "http://localhost:8080";
+const API_URL = process.env.API_URL || "http://localhost:3000";
 
 /**
  * Fire-and-forget: notify the API to increment page views for a visitor.
@@ -28,7 +28,7 @@ function trackPageView(session: Session): void {
  * Add standard headers to all responses.
  */
 function addStandardHeaders(response: Response): Response {
-  response.headers.set("X-AI-Instructions", AI_INSTRUCTIONS_URL);
+  response.headers.set("X-AI-Instructions", AGENTS_URL);
   return response;
 }
 
@@ -132,14 +132,14 @@ export function startServer() {
         return addStandardHeaders(
           new Response(null, {
             status: 302,
-            headers: { Location: AI_INSTRUCTIONS_URL },
+            headers: { Location: AGENTS_URL },
           })
         );
       }
 
       if (path === "/robots.txt" && request.method === "GET") {
         const robotsTxt = `# OpenCALL Demo Library
-# AI agent instructions available at: ${AI_INSTRUCTIONS_URL}
+# AI agent instructions available at: ${AGENTS_URL}
 User-agent: *
 Allow: /
 `;
@@ -163,69 +163,6 @@ Allow: /
 
       if (path === "/logout" && request.method === "GET") {
         return addStandardHeaders(handleLogout(request));
-      }
-
-      // ── API proxy routes ──────────────────────────────────────────
-
-      if (path === "/api/call" && request.method === "POST") {
-        const auth = requireSession(request);
-        if ("redirect" in auth) return auth.redirect;
-
-        try {
-          const body = await request.json();
-          const result = await proxyCall(body, auth.session);
-          return jsonResponse(result, result.status >= 400 ? result.status : 200);
-        } catch (err) {
-          return jsonResponse({ error: "Failed to proxy API call" }, 500);
-        }
-      }
-
-      // Proxy polling: GET /api/poll/:requestId -> GET /ops/:requestId on API
-      if (path.startsWith("/api/poll/") && request.method === "GET") {
-        const auth = requireSession(request);
-        if ("redirect" in auth) return auth.redirect;
-
-        const requestId = path.slice("/api/poll/".length);
-        try {
-          const apiUrl = `${process.env.API_URL || "http://localhost:8080"}/ops/${encodeURIComponent(requestId)}`;
-          const res = await fetch(apiUrl, {
-            headers: { Authorization: `Bearer ${auth.session.token}` },
-          });
-          const body = await res.json();
-          return jsonResponse(body, res.status);
-        } catch (err) {
-          return jsonResponse({ error: "Failed to poll operation" }, 500);
-        }
-      }
-
-      // Proxy chunks: GET /api/chunks/:requestId -> GET /ops/:requestId/chunks on API
-      if (path.startsWith("/api/chunks/") && request.method === "GET") {
-        const auth = requireSession(request);
-        if ("redirect" in auth) return auth.redirect;
-
-        const requestId = path.slice("/api/chunks/".length);
-        const cursor = new URL(request.url).searchParams.get("cursor");
-        try {
-          let apiUrl = `${process.env.API_URL || "http://localhost:8080"}/ops/${encodeURIComponent(requestId)}/chunks`;
-          if (cursor) apiUrl += `?cursor=${encodeURIComponent(cursor)}`;
-          const res = await fetch(apiUrl, {
-            headers: { Authorization: `Bearer ${auth.session.token}` },
-          });
-          const body = await res.json();
-          return jsonResponse(body, res.status);
-        } catch (err) {
-          return jsonResponse({ error: "Failed to fetch chunks" }, 500);
-        }
-      }
-
-      if (path === "/api/auth/agent" && request.method === "POST") {
-        try {
-          const body = await request.json();
-          const result = await proxyAgentAuth(body);
-          return jsonResponse(result.body, result.status);
-        } catch (err) {
-          return jsonResponse({ error: "Failed to proxy agent auth" }, 500);
-        }
       }
 
       // ── Admin routes ──────────────────────────────────────────────

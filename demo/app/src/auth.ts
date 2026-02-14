@@ -1,6 +1,8 @@
 import { createSession, getSession, deleteSession, type Session } from "./session.ts";
 import { proxyAuth } from "./proxy.ts";
 
+const AGENTS_URL = process.env.AGENTS_URL || "http://localhost:3003";
+
 /**
  * Parse cookies from a Cookie header string into a key-value map.
  */
@@ -69,7 +71,7 @@ export function handleAuthPage(req: Request): Response {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="ai-instructions" content="https://agents.opencall-api.com/">
+  <meta name="ai-instructions" content="${AGENTS_URL}">
   <title>Sign In - OpenCALL Demo Library</title>
   <link rel="stylesheet" href="/app.css">
 </head>
@@ -122,11 +124,57 @@ export function handleAuthPage(req: Request): Response {
 
       <div class="auth-footer">
         <p>This is a demo environment. Data resets periodically.</p>
-        <p>Explore the <a href="https://agents.opencall-api.com/" target="_blank" rel="noopener">API documentation</a> to learn more.</p>
+        <p>Explore the <a href="${AGENTS_URL}" target="_blank" rel="noopener">API documentation</a> to learn more.</p>
       </div>
     </div>
   </main>
   <script src="/app.js"></script>
+  <script>
+    // Handle auth form submission via JavaScript to get token
+    document.querySelector('.auth-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const form = e.target;
+      const username = form.querySelector('#username').value.trim();
+      const scopeCheckboxes = form.querySelectorAll('input[name="scopes"]:checked');
+      const scopes = Array.from(scopeCheckboxes).map(cb => cb.value);
+
+      const body = {};
+      if (username) body.username = username;
+      if (scopes.length > 0) body.scopes = scopes;
+
+      try {
+        const res = await fetch('/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          alert('Authentication failed. Please try again.');
+          return;
+        }
+
+        const data = await res.json();
+
+        // Store in sessionStorage for direct API calls
+        sessionStorage.setItem('opencall_token', data.token);
+        sessionStorage.setItem('opencall_api_url', data.apiUrl);
+        sessionStorage.setItem('opencall_user', JSON.stringify({
+          username: data.username,
+          cardNumber: data.cardNumber,
+          scopes: data.scopes,
+          expiresAt: data.expiresAt,
+        }));
+
+        // Redirect to dashboard
+        window.location.href = '/';
+      } catch (err) {
+        console.error('Auth error:', err);
+        alert('Authentication failed. Please try again.');
+      }
+    });
+  </script>
 </body>
 </html>`;
 
@@ -136,29 +184,51 @@ export function handleAuthPage(req: Request): Response {
   });
 }
 
+const API_URL = process.env.API_URL || "http://localhost:3000";
+
 /**
  * Handle POST /auth - Process auth form submission.
- * Proxies to the API, creates a session, and redirects to dashboard.
+ * Supports both JSON (returns token) and form-data (redirects to dashboard).
  */
 export async function handleAuthSubmit(req: Request): Promise<Response> {
-  // Parse form data
-  const formData = await req.formData();
-  const username = formData.get("username") as string | null;
-  const scopeValues = formData.getAll("scopes") as string[];
+  const contentType = req.headers.get("Content-Type") || "";
+  const isJson = contentType.includes("application/json");
 
-  // Build body for API auth
-  const authBody: { username?: string; scopes?: string[] } = {};
-  if (username && username.trim()) {
-    authBody.username = username.trim();
-  }
-  if (scopeValues.length > 0) {
-    authBody.scopes = scopeValues;
+  let authBody: { username?: string; scopes?: string[] } = {};
+
+  if (isJson) {
+    // JSON request from JavaScript
+    const json = await req.json() as { username?: string; scopes?: string[] };
+    if (json.username && json.username.trim()) {
+      authBody.username = json.username.trim();
+    }
+    if (json.scopes && json.scopes.length > 0) {
+      authBody.scopes = json.scopes;
+    }
+  } else {
+    // Form submission (backward compatible)
+    const formData = await req.formData();
+    const username = formData.get("username") as string | null;
+    const scopeValues = formData.getAll("scopes") as string[];
+
+    if (username && username.trim()) {
+      authBody.username = username.trim();
+    }
+    if (scopeValues.length > 0) {
+      authBody.scopes = scopeValues;
+    }
   }
 
   // Proxy to API
   const result = await proxyAuth(authBody, req.headers);
 
   if (result.status !== 200) {
+    if (isJson) {
+      return new Response(JSON.stringify({ error: "Authentication failed" }), {
+        status: result.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     // Auth failed - redirect back to auth page with error
     return new Response(null, {
       status: 302,
@@ -174,7 +244,7 @@ export async function handleAuthSubmit(req: Request): Promise<Response> {
     expiresAt: number;
   };
 
-  // Create server-side session
+  // Create server-side session (needed for page rendering)
   const session = createSession({
     token: authData.token,
     username: authData.username,
@@ -186,6 +256,25 @@ export async function handleAuthSubmit(req: Request): Promise<Response> {
   // Calculate max-age from expiresAt
   const maxAge = authData.expiresAt - Math.floor(Date.now() / 1000);
 
+  if (isJson) {
+    // Return JSON with token and apiUrl for browser storage
+    return new Response(JSON.stringify({
+      token: authData.token,
+      username: authData.username,
+      cardNumber: authData.cardNumber,
+      scopes: authData.scopes,
+      expiresAt: authData.expiresAt,
+      apiUrl: API_URL,
+    }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Set-Cookie": buildSessionCookie(session.sid, maxAge),
+      },
+    });
+  }
+
+  // Form submission - redirect to dashboard
   return new Response(null, {
     status: 302,
     headers: {

@@ -82,10 +82,12 @@ describe("POST /auth/agent", () => {
     expect(res.body.token).toMatch(/^agent_/);
   });
 
-  test("agent token carries fixed scopes", async () => {
+  test("agent token carries fixed scopes (NO items:checkin)", async () => {
     const res = await authenticateAgent(seedCardNumber);
     const scopes = res.body.scopes as string[];
+    // Agent scopes do NOT include items:checkin — agents cannot return physical items
     expect(scopes).toEqual(["items:browse", "items:read", "items:write", "patron:read"]);
+    expect(scopes).not.toContain("items:checkin");
   });
 
   test("with invalid card format returns 400 INVALID_CARD", async () => {
@@ -126,5 +128,47 @@ describe("Auth enforcement", () => {
 
     const cause = res.body.error!.cause as { missing: string[] };
     expect(cause.missing).toContain("patron:billing");
+  });
+});
+
+// ── items:checkin Scope Enforcement ─────────────────────────────────────
+
+describe("items:checkin scope enforcement", () => {
+  let humanToken: string;
+  let agentToken: string;
+
+  beforeAll(async () => {
+    // Human gets items:checkin by default
+    const human = await authenticate();
+    humanToken = human.body.token;
+    const cardNumber = human.body.cardNumber as string;
+
+    // Agent does NOT get items:checkin
+    const agent = await authenticateAgent(cardNumber);
+    agentToken = agent.body.token;
+  });
+
+  test("human default scopes include items:checkin", async () => {
+    const res = await authenticate();
+    const scopes = res.body.scopes as string[];
+    expect(scopes).toContain("items:checkin");
+  });
+
+  test("agent calling v1:item.return gets 403 INSUFFICIENT_SCOPES with items:checkin in cause", async () => {
+    // Agent lacks items:checkin scope, so v1:item.return should fail
+    const res = await call("v1:item.return", { itemId: "any-item" }, undefined, agentToken);
+    expect(res.status).toBe(403);
+    expect(res.body.state).toBe("error");
+    expect(res.body.error!.code).toBe("INSUFFICIENT_SCOPES");
+
+    const cause = res.body.error!.cause as { missing: string[] };
+    expect(cause.missing).toContain("items:checkin");
+  });
+
+  test("human can call v1:item.return (has items:checkin scope)", async () => {
+    // Human has items:checkin, so they pass scope check (may fail with domain error, but not 403)
+    const res = await call("v1:item.return", { itemId: "any-item" }, undefined, humanToken);
+    // Should NOT be 403 - scope check passes, may be 200 with domain error
+    expect(res.status).not.toBe(403);
   });
 });

@@ -40,6 +40,8 @@ function seedTestDb(db: Database): void {
   // High copy counts ensure new patrons can always be seeded with overdue items,
   // even when multiple test files run in parallel and create many patrons.
   const items = [
+    // Fixed test book for integration tests (same ID as in seed.ts)
+    { id: "00000000-0000-0000-0000-000000000100", type: "book", title: "The Test Pattern Handbook", creator: "Demo Author", year: 2024, isbn: "9780000000001", totalCopies: 5 },
     { id: "item-book-001", type: "book", title: "The Crystal Garden", creator: "Alice Smith", year: 2020, isbn: "9781234567890", totalCopies: 20 },
     { id: "item-book-002", type: "book", title: "Journey to Midnight", creator: "Bob Johnson", year: 2019, isbn: "9781234567891", totalCopies: 20 },
     { id: "item-book-003", type: "book", title: "Secrets of the Tower", creator: "Charlie Davis", year: 2021, isbn: "9781234567892", totalCopies: 20 },
@@ -79,5 +81,24 @@ function seedTestDb(db: Database): void {
       item.totalCopies
     );
   }
+  db.exec("COMMIT");
+
+  // ── Fixed test patron for integration tests ──────────────────────────
+  const TEST_PATRON_ID = "00000000-0000-0000-0000-000000000001";
+  const TEST_CARD_NUMBER = "TEST-DEMO-00";
+
+  const insertPatron = db.prepare(
+    `INSERT INTO patrons (id, username, name, card_number, created_at, is_seed)
+     VALUES (?, ?, ?, ?, ?, 1)`
+  );
+
+  db.exec("BEGIN TRANSACTION");
+  insertPatron.run(
+    TEST_PATRON_ID,
+    "test-patron",
+    "Test Patron",
+    TEST_CARD_NUMBER,
+    new Date().toISOString().split("T")[0]
+  );
   db.exec("COMMIT");
 }

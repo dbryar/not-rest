@@ -235,90 +235,169 @@ initTheme();
 
 
 /* ===========================================
+   AUTH & SESSION
+   =========================================== */
+
+/**
+ * Get auth info from sessionStorage.
+ * Returns { token, apiUrl, user } or null if not authenticated.
+ */
+function getAuth() {
+  const token = sessionStorage.getItem('opencall_token');
+  const apiUrl = sessionStorage.getItem('opencall_api_url');
+  const userJson = sessionStorage.getItem('opencall_user');
+
+  if (!token || !apiUrl) {
+    return null;
+  }
+
+  const user = userJson ? JSON.parse(userJson) : null;
+
+  // Check expiry
+  if (user && user.expiresAt && Date.now() / 1000 > user.expiresAt) {
+    sessionStorage.clear();
+    return null;
+  }
+
+  return { token, apiUrl, user };
+}
+
+/**
+ * Clear auth and redirect to login.
+ */
+function logout() {
+  sessionStorage.clear();
+  window.location.href = '/logout';
+}
+
+
+/* ===========================================
    CORE API CLIENT
    =========================================== */
 
 /**
- * Call the API via the app server's proxy endpoint.
- * All operations go through POST /api/call.
+ * Call the API directly using token from sessionStorage.
+ * All operations go through POST ${apiUrl}/call.
  * Returns { status, data, request }.
  */
 async function callApi(op, args, ctx) {
   args = args || {};
   ctx = ctx || {};
 
+  const auth = getAuth();
+  if (!auth) {
+    window.location.href = '/auth';
+    return { status: 401, data: { state: 'error', error: { code: 'AUTH_REQUIRED' } }, request: null };
+  }
+
   const requestBody = { op, args };
   if (Object.keys(ctx).length > 0) {
     requestBody.ctx = ctx;
   }
 
+  const apiUrl = auth.apiUrl + '/call';
   const startTime = Date.now();
+
+  // Build request entry for envelope viewer
+  const requestEntry = {
+    timestamp: startTime,
+    op: op,
+    method: 'POST',
+    url: apiUrl,
+    headers: {
+      'Authorization': 'Bearer ' + maskToken(auth.token),
+      'Content-Type': 'application/json',
+    },
+    body: requestBody,
+  };
 
   let res;
   let data;
   try {
-    res = await fetch('/api/call', {
+    res = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + auth.token,
+      },
       body: JSON.stringify(requestBody),
     });
     const elapsed = Date.now() - startTime;
     data = await res.json();
 
-    // The proxy returns { status, response, request }
-    const apiStatus = data.status || res.status;
-    const apiResponse = data.response || data;
-    const apiRequest = data.request || { method: 'POST', url: '/call', body: requestBody };
+    // Store request with requestId from response
+    const requestId = data.requestId || crypto.randomUUID();
+    requestEntry.requestId = requestId;
+    addRequest(requestEntry);
 
-    // Update the envelope viewer
-    updateEnvelopeViewer({
-      request: apiRequest,
-      response: {
-        status: apiStatus,
-        body: apiResponse,
-        elapsed: elapsed,
-      },
+    // Store response
+    addResponse(requestId, {
+      timestamp: Date.now(),
+      status: res.status,
+      headers: Object.fromEntries(res.headers.entries()),
+      body: data,
+      timeMs: elapsed,
     });
 
+    // Render envelope viewer
+    renderEnvelopeViewer();
+
     // Check for session expiry (401) - redirect to auth
-    if (apiStatus === 401 || res.status === 401) {
-      window.location.href = '/auth?reset=1';
-      return { status: 401, data: apiResponse, request: apiRequest };
+    if (res.status === 401) {
+      sessionStorage.clear();
+      window.location.href = '/auth?expired=1';
+      return { status: 401, data: data, request: requestEntry };
     }
 
-    return { status: apiStatus, data: apiResponse, request: apiRequest };
+    return { status: res.status, data: data, request: requestEntry };
   } catch (err) {
     const elapsed = Date.now() - startTime;
     const errorBody = { state: 'error', error: { code: 'NETWORK_ERROR', message: err.message } };
 
-    updateEnvelopeViewer({
-      request: { method: 'POST', url: '/api/call', body: requestBody },
-      response: {
-        status: 0,
-        body: errorBody,
-        elapsed: elapsed,
-      },
+    const requestId = crypto.randomUUID();
+    requestEntry.requestId = requestId;
+    addRequest(requestEntry);
+    addResponse(requestId, {
+      timestamp: Date.now(),
+      status: 0,
+      headers: {},
+      body: errorBody,
+      timeMs: elapsed,
     });
+    renderEnvelopeViewer();
 
-    return { status: 0, data: errorBody, request: requestBody };
+    return { status: 0, data: errorBody, request: requestEntry };
   }
 }
 
 /**
- * Fetch a polling endpoint directly (for async operations).
+ * Poll for async operation status directly from API.
  */
 async function pollOperation(requestId) {
+  const auth = getAuth();
+  if (!auth) {
+    return { status: 401, data: { state: 'error', error: { code: 'AUTH_REQUIRED' } } };
+  }
+
+  const apiUrl = auth.apiUrl + '/ops/' + encodeURIComponent(requestId);
   const startTime = Date.now();
 
   try {
-    const res = await fetch('/api/poll/' + encodeURIComponent(requestId));
+    const res = await fetch(apiUrl, {
+      headers: { 'Authorization': 'Bearer ' + auth.token },
+    });
     const elapsed = Date.now() - startTime;
     const data = await res.json();
 
-    updateEnvelopeViewer({
-      request: { method: 'GET', url: '/ops/' + requestId, body: null },
-      response: { status: res.status, body: data, elapsed: elapsed },
+    // Add polling response to existing request's response chain
+    addResponse(requestId, {
+      timestamp: Date.now(),
+      status: res.status,
+      headers: Object.fromEntries(res.headers.entries()),
+      body: data,
+      timeMs: elapsed,
     });
+    renderEnvelopeViewer();
 
     return { status: res.status, data: data };
   } catch (err) {
@@ -330,14 +409,21 @@ async function pollOperation(requestId) {
  * Fetch chunks for a completed async operation.
  */
 async function fetchChunks(requestId) {
+  const auth = getAuth();
+  if (!auth) {
+    return [];
+  }
+
   const chunks = [];
   let cursor = null;
 
   do {
-    let url = '/api/chunks/' + encodeURIComponent(requestId);
+    let url = auth.apiUrl + '/ops/' + encodeURIComponent(requestId) + '/chunks';
     if (cursor) url += '?cursor=' + encodeURIComponent(cursor);
 
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + auth.token },
+    });
     if (!res.ok) break;
 
     const chunk = await res.json();
@@ -350,47 +436,73 @@ async function fetchChunks(requestId) {
 
 
 /* ===========================================
-   ENVELOPE VIEWER
+   ENVELOPE VIEWER — Maps Data Model
    =========================================== */
 
-let envelopeExchanges = [];
-let envelopeCurrentIndex = -1;
+// Map<number, RequestEntry> — keyed by timestamp for chronological sorting
+let requests = new Map();
+
+// Map<string, ResponseEntry[]> — keyed by requestId, ARRAY for polling chain
+let responses = new Map();
+
+// Currently selected request timestamp
+let selectedRequestTimestamp = null;
 
 /**
- * Update the envelope viewer with a new request/response exchange.
- * Always appends to the exchange history and navigates to the new entry.
+ * Add a request to the requests Map.
  */
-function updateEnvelopeViewer(exchange) {
-  envelopeExchanges.push(exchange);
-  envelopeCurrentIndex = envelopeExchanges.length - 1;
-  renderEnvelopeViewer();
+function addRequest(entry) {
+  requests.set(entry.timestamp, entry);
+  selectedRequestTimestamp = entry.timestamp;
+}
+
+/**
+ * Add a response to the responses Map (appends to array for polling chain).
+ */
+function addResponse(requestId, entry) {
+  if (!responses.has(requestId)) {
+    responses.set(requestId, []);
+  }
+  responses.get(requestId).push(entry);
 }
 
 /**
  * Clear the envelope viewer.
  */
 function clearEnvelopeViewer() {
-  envelopeExchanges = [];
-  envelopeCurrentIndex = -1;
+  requests = new Map();
+  responses = new Map();
+  selectedRequestTimestamp = null;
   renderEnvelopeViewer();
 }
 
 /**
- * Navigate to the previous exchange.
+ * Get sorted request timestamps (newest first).
+ */
+function getSortedRequestTimestamps() {
+  return Array.from(requests.keys()).sort((a, b) => b - a);
+}
+
+/**
+ * Navigate to the previous request (older).
  */
 function envelopePrev() {
-  if (envelopeCurrentIndex > 0) {
-    envelopeCurrentIndex--;
+  const timestamps = getSortedRequestTimestamps();
+  const currentIdx = timestamps.indexOf(selectedRequestTimestamp);
+  if (currentIdx < timestamps.length - 1) {
+    selectedRequestTimestamp = timestamps[currentIdx + 1];
     renderEnvelopeViewer();
   }
 }
 
 /**
- * Navigate to the next exchange.
+ * Navigate to the next request (newer).
  */
 function envelopeNext() {
-  if (envelopeCurrentIndex < envelopeExchanges.length - 1) {
-    envelopeCurrentIndex++;
+  const timestamps = getSortedRequestTimestamps();
+  const currentIdx = timestamps.indexOf(selectedRequestTimestamp);
+  if (currentIdx > 0) {
+    selectedRequestTimestamp = timestamps[currentIdx - 1];
     renderEnvelopeViewer();
   }
 }
@@ -402,7 +514,7 @@ function renderEnvelopeViewer() {
   const viewer = document.getElementById('envelope-viewer');
   if (!viewer) return;
 
-  if (envelopeExchanges.length === 0) {
+  if (requests.size === 0) {
     viewer.innerHTML =
       '<div class="viewer-header">' +
         '<span class="viewer-title">Envelope Viewer</span>' +
@@ -414,21 +526,27 @@ function renderEnvelopeViewer() {
     return;
   }
 
-  const current = envelopeExchanges[envelopeCurrentIndex];
-  const total = envelopeExchanges.length;
-  const idx = envelopeCurrentIndex;
-  const prevDisabled = idx <= 0;
-  const nextDisabled = idx >= total - 1;
+  const timestamps = getSortedRequestTimestamps();
+  const currentIdx = timestamps.indexOf(selectedRequestTimestamp);
+  const total = timestamps.length;
+
+  // Get current request and its responses
+  const currentRequest = requests.get(selectedRequestTimestamp);
+  const requestId = currentRequest?.requestId;
+  const responseChain = requestId ? (responses.get(requestId) || []) : [];
+
+  const prevDisabled = currentIdx >= total - 1;  // Can't go to older
+  const nextDisabled = currentIdx <= 0;          // Can't go to newer
 
   // Extract op name from request body for the label
-  const opName = current.request?.body?.op || 'call';
+  const opName = currentRequest?.body?.op || currentRequest?.op || 'call';
 
   // Build header with nav controls
   let html = '<div class="viewer-header">' +
     '<span class="viewer-title">Envelope Viewer</span>' +
     '<div class="viewer-nav">' +
       '<button class="btn btn-sm btn-nav" onclick="envelopePrev()"' + (prevDisabled ? ' disabled' : '') + '>&lsaquo;</button>' +
-      '<span class="viewer-counter">' + (idx + 1) + ' / ' + total + '</span>' +
+      '<span class="viewer-counter">' + (currentIdx + 1) + ' / ' + total + '</span>' +
       '<button class="btn btn-sm btn-nav" onclick="envelopeNext()"' + (nextDisabled ? ' disabled' : '') + '>&rsaquo;</button>' +
       '<button class="btn btn-sm btn-secondary" onclick="clearEnvelopeViewer()">Clear</button>' +
     '</div>' +
@@ -437,10 +555,14 @@ function renderEnvelopeViewer() {
   // Op label bar
   html += '<div class="viewer-op-label">' + escapeHtml(opName) + '</div>';
 
-  // Build tabs
+  // Build tabs - show response chain count if > 1
+  const responseLabel = responseChain.length > 1
+    ? 'Response (' + responseChain.length + ')'
+    : 'Response';
+
   html += '<div class="tabs">';
   html += '<button class="tab active" data-viewer-tab="request" onclick="switchViewerTab(\'request\')">Request</button>';
-  html += '<button class="tab" data-viewer-tab="response" onclick="switchViewerTab(\'response\')">Response</button>';
+  html += '<button class="tab" data-viewer-tab="response" onclick="switchViewerTab(\'response\')">' + responseLabel + '</button>';
   html += '</div>';
 
   // Content area
@@ -448,12 +570,12 @@ function renderEnvelopeViewer() {
 
   // Request tab content
   html += '<div class="tab-content" data-viewer-content="request">';
-  html += renderRequestTab(current.request);
+  html += renderRequestTab(currentRequest);
   html += '</div>';
 
-  // Response tab content
+  // Response tab content — shows full response chain
   html += '<div class="tab-content" data-viewer-content="response" style="display:none">';
-  html += renderResponseTab(current.response);
+  html += renderResponseChain(responseChain);
   html += '</div>';
 
   html += '</div>';
@@ -501,9 +623,9 @@ function renderRequestTab(req) {
 }
 
 /**
- * Render the response tab content.
+ * Render a single response entry.
  */
-function renderResponseTab(resp) {
+function renderResponseEntry(resp, index, total) {
   if (!resp) return '<div class="empty-viewer">No response data</div>';
 
   let html = '';
@@ -517,6 +639,13 @@ function renderResponseTab(resp) {
   else if (status >= 400 && status < 500) statusClass = 'status-error';
   else if (status >= 500) statusClass = 'status-server-error';
 
+  // Show response number if part of a chain
+  if (total > 1) {
+    html += '<div class="response-chain-header">' +
+      '<span class="response-chain-label">Response ' + (index + 1) + ' of ' + total + '</span>' +
+    '</div>';
+  }
+
   html += '<div class="meta-row">' +
     '<span class="meta-label">Status</span>' +
     '<span class="meta-value ' + statusClass + '">' + status + '</span>' +
@@ -524,7 +653,7 @@ function renderResponseTab(resp) {
 
   html += '<div class="meta-row">' +
     '<span class="meta-label">Time</span>' +
-    '<span class="meta-value">' + (resp.elapsed || 0) + 'ms</span>' +
+    '<span class="meta-value">' + (resp.timeMs || resp.elapsed || 0) + 'ms</span>' +
   '</div>';
 
   // Response state if present
@@ -542,14 +671,46 @@ function renderResponseTab(resp) {
   // Response body
   if (resp.body) {
     const jsonStr = JSON.stringify(resp.body, null, 2);
+    const textareaId = 'response-json-raw-' + index;
     html += '<div class="json-viewer">' +
-      '<button class="copy-btn" onclick="copyJsonResponse(this)">Copy</button>' +
+      '<button class="copy-btn" onclick="copyToClipboard(document.getElementById(\'' + textareaId + '\').value, this)">Copy</button>' +
       '<pre class="code-block">' + syntaxHighlight(resp.body) + '</pre>' +
-      '<textarea class="sr-only" id="response-json-raw">' + escapeHtml(jsonStr) + '</textarea>' +
+      '<textarea class="sr-only" id="' + textareaId + '">' + escapeHtml(jsonStr) + '</textarea>' +
     '</div>';
   }
 
   return html;
+}
+
+/**
+ * Render the full response chain (for async operations with polling).
+ */
+function renderResponseChain(responseChain) {
+  if (!responseChain || responseChain.length === 0) {
+    return '<div class="empty-viewer">No response data</div>';
+  }
+
+  let html = '';
+  const total = responseChain.length;
+
+  // Render each response in the chain
+  responseChain.forEach((resp, index) => {
+    html += '<div class="response-entry">';
+    html += renderResponseEntry(resp, index, total);
+    html += '</div>';
+    if (index < total - 1) {
+      html += '<div class="response-chain-divider"></div>';
+    }
+  });
+
+  return html;
+}
+
+/**
+ * Render the response tab content (backwards compatibility wrapper).
+ */
+function renderResponseTab(resp) {
+  return renderResponseEntry(resp, 0, 1);
 }
 
 /**
@@ -744,7 +905,7 @@ async function initDashboard() {
     '<h3>AI Agent Integration</h3>' +
     '<p class="card-meta mt-1">This API supports AI agent discovery. Agents can authenticate using a library card number and interact with all available operations.</p>' +
     '<div class="mt-2">' +
-      '<a href="https://agents.opencall-api.com/" target="_blank" rel="noopener" class="btn btn-sm btn-outline">View Agent Instructions</a>' +
+      '<a href="' + (document.body.dataset.agentsUrl || '/') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline">View Agent Instructions</a>' +
     '</div>' +
   '</div>';
 

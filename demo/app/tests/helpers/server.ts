@@ -2,6 +2,8 @@
 // Use in-memory DBs for both the API and the app to keep tests isolated.
 process.env.DATABASE_PATH = `:memory:`;
 process.env.SESSION_DB_PATH = `:memory:`;
+process.env.AGENTS_URL = process.env.AGENTS_URL || "http://localhost:3003";
+process.env.WWW_URL = process.env.WWW_URL || "http://localhost:3002";
 
 import type { Server } from "bun";
 import type { Database } from "bun:sqlite";

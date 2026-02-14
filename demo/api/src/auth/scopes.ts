@@ -3,6 +3,7 @@ export type Scope =
   | "items:browse"
   | "items:read"
   | "items:write"
+  | "items:checkin"
   | "items:manage"
   | "patron:read"
   | "patron:billing"
@@ -12,7 +13,8 @@ export type Scope =
 export const SCOPE_TO_OPS: Record<Scope, string[]> = {
   "items:browse": ["v1:catalog.list", "v1:catalog.listLegacy"],
   "items:read": ["v1:item.get", "v1:item.getMedia"],
-  "items:write": ["v1:item.reserve", "v1:item.return"],
+  "items:write": ["v1:item.reserve"],
+  "items:checkin": ["v1:item.return"],
   "items:manage": ["v1:catalog.bulkImport"],
   "patron:read": ["v1:patron.get", "v1:patron.history"],
   "patron:billing": ["v1:patron.fines"],
@@ -37,6 +39,7 @@ export const DEFAULT_HUMAN_SCOPES: Scope[] = [
   "items:browse",
   "items:read",
   "items:write",
+  "items:checkin",
   "patron:read",
   "reports:generate",
 ];

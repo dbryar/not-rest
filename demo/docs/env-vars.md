@@ -8,26 +8,28 @@ Bun automatically loads `.env` files, so no dotenv package is needed.
 
 ## API Service (`demo/api`)
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PORT` | No | `8080` | HTTP port the API server listens on |
-| `DATABASE_PATH` | No | `./library.db` | Path to the SQLite database file |
-| `GCS_BUCKET` | **Yes** | -- | Google Cloud Storage bucket name for cover images |
-| `GCS_PROJECT_ID` | **Yes** | -- | GCP project ID (used for GCS and Cloud Run) |
-| `ADMIN_SECRET` | **Yes** | -- | Shared secret for the `POST /admin/reset` endpoint. Must match the value configured in Cloud Scheduler |
-| `CALL_VERSION` | No | `2026-02-10` | OpenCALL API version string returned in responses |
+| Variable         | Required | Default        | Description                                                                                            |
+| ---------------- | -------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| `PORT`           | No       | `8080`         | HTTP port the API server listens on                                                                    |
+| `DATABASE_PATH`  | No       | `./library.db` | Path to the SQLite database file                                                                       |
+| `GCS_BUCKET`     | No\*     | --             | Google Cloud Storage bucket name for cover images                                                      |
+| `GCS_PROJECT_ID` | No\*     | --             | GCP project ID (used for GCS and Cloud Run)                                                            |
+| `ADMIN_SECRET`   | **Yes**  | --             | Shared secret for the `POST /admin/reset` endpoint. Must match the value configured in Cloud Scheduler |
+| `CALL_VERSION`   | No       | `2026-02-10`   | OpenCALL API version string returned in responses                                                      |
+
+> \* **GCS in demo mode:** `GCS_BUCKET` and `GCS_PROJECT_ID` are only required for production deployments. In local development and Docker Compose, GCS is mocked -- cover images fall back to public placeholder URLs so no GCP credentials are needed.
 
 ---
 
 ## App Service (`demo/app`)
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PORT` / `APP_PORT` | No | `3000` | HTTP port the App server listens on. `APP_PORT` takes precedence if both are set |
-| `API_URL` | **Yes** | -- | Internal URL of the API service (e.g. the Cloud Run service URL) |
-| `SESSION_DB_PATH` | No | `./sessions.db` | Path to the SQLite database used for session storage |
-| `COOKIE_SECRET` | **Yes** | -- | Secret key used for signing session cookies. Use a random string of at least 32 characters |
-| `AGENTS_URL` | No | `https://agents.opencall-api.com` | Base URL for the agents documentation site, used to build links in the UI |
+| Variable            | Required | Default                           | Description                                                                                |
+| ------------------- | -------- | --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `PORT` / `APP_PORT` | No       | `3000`                            | HTTP port the App server listens on. `APP_PORT` takes precedence if both are set           |
+| `API_URL`           | **Yes**  | --                                | Internal URL of the API service (e.g. the Cloud Run service URL)                           |
+| `SESSION_DB_PATH`   | No       | `./sessions.db`                   | Path to the SQLite database used for session storage                                       |
+| `COOKIE_SECRET`     | **Yes**  | --                                | Secret key used for signing session cookies. Use a random string of at least 32 characters |
+| `AGENTS_URL`        | No       | `https://agents.opencall-api.com` | Base URL for the agents documentation site, used to build links in the UI                  |
 
 ---
 
@@ -35,13 +37,13 @@ Bun automatically loads `.env` files, so no dotenv package is needed.
 
 These variables are consumed by the deploy scripts in `demo/scripts/`.
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `GCS_PROJECT_ID` | **Yes** | -- | GCP project ID (same as API) |
-| `GCS_BUCKET` | **Yes** | -- | GCS bucket name (same as API) |
-| `ADMIN_SECRET` | **Yes** | -- | Admin secret (same as API) |
-| `COOKIE_SECRET` | **Yes** | -- | Cookie secret (same as App) |
-| `CLOUD_RUN_REGION` | No | `australia-southeast1` | GCP region for Cloud Run and Cloud Scheduler |
+| Variable           | Required | Default                | Description                                  |
+| ------------------ | -------- | ---------------------- | -------------------------------------------- |
+| `GCS_PROJECT_ID`   | **Yes**  | --                     | GCP project ID (same as API)                 |
+| `GCS_BUCKET`       | **Yes**  | --                     | GCS bucket name (same as API)                |
+| `ADMIN_SECRET`     | **Yes**  | --                     | Admin secret (same as API)                   |
+| `COOKIE_SECRET`    | **Yes**  | --                     | Cookie secret (same as App)                  |
+| `CLOUD_RUN_REGION` | No       | `australia-southeast1` | GCP region for Cloud Run and Cloud Scheduler |
 
 ---
 

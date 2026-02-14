@@ -241,6 +241,20 @@ function seed() {
     totalCopies: number;
   }[] = [];
 
+  // Add fixed test book for integration tests
+  const TEST_BOOK_ID = "00000000-0000-0000-0000-000000000100";
+  catalogItems.push({
+    id: TEST_BOOK_ID,
+    type: "book",
+    title: "The Test Pattern Handbook",
+    creator: "Demo Author",
+    year: 2024,
+    isbn: "9780000000001",
+    description: "A test book for integration testing and agent demos. This book is always available for reservation.",
+    tags: JSON.stringify(["test", "demo", "fiction"]),
+    totalCopies: 5,
+  });
+
   // 150 books
   const usedTitles = new Set<string>();
   for (let i = 0; i < 150; i++) {
@@ -353,7 +367,19 @@ function seed() {
   const patrons: Patron[] = [];
   const usedUsernames = new Set<string>();
 
-  for (let i = 0; i < 50; i++) {
+  // Add fixed test user for integration tests and agent demos
+  // Card number: TEST-DEMO-00 (deterministic for testing)
+  const TEST_USER_ID = "00000000-0000-0000-0000-000000000001";
+  patrons.push({
+    id: TEST_USER_ID,
+    username: "test-patron",
+    name: "Test Patron",
+    cardNumber: "TEST-DEMO-00",
+  });
+  usedUsernames.add("test-patron");
+
+  // Generate remaining 49 random patrons
+  for (let i = 0; i < 49; i++) {
     let username = `${pick(ADJECTIVES_USERNAME)}-${pick(ANIMALS_USERNAME)}`;
     while (usedUsernames.has(username)) {
       username = `${pick(ADJECTIVES_USERNAME)}-${pick(ANIMALS_USERNAME)}`;

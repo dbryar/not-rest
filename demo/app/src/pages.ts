@@ -1,5 +1,8 @@
 import type { Session } from "./session.ts";
 
+const AGENTS_URL = process.env.AGENTS_URL || "http://localhost:3003";
+const WWW_URL = process.env.WWW_URL || "http://localhost:3002";
+
 /**
  * Escape HTML special characters to prevent XSS.
  */
@@ -22,11 +25,11 @@ function layout(page: string, title: string, content: string, session: Session):
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="ai-instructions" content="https://agents.opencall-api.com/">
+  <meta name="ai-instructions" content="${AGENTS_URL}">
   <title>${title} - OpenCALL Demo Library</title>
   <link rel="stylesheet" href="/app.css">
 </head>
-<body data-page="${page}">
+<body data-page="${page}" data-agents-url="${AGENTS_URL}">
   <button class="sidebar-toggle" id="sidebar-toggle">&#9776;</button>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
@@ -57,6 +60,7 @@ function layout(page: string, title: string, content: string, session: Session):
       </a>
 
       <div class="sidebar-footer">
+        <a href="${WWW_URL}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">About OpenCALL</a>
         <a href="/logout" class="btn btn-sm btn-outline">Sign Out</a>
         <button class="theme-toggle" aria-label="Toggle theme">
           <span class="icon-light">&#9790;</span>

@@ -9,8 +9,10 @@ import { returnItem } from "../services/lending.ts";
  *
  * @op v1:item.return
  * @execution sync
- * @timeout 5000
- * @security items:write
+ * @timeout 5s
+ * @ttl 0s
+ * @security items:checkin
+ * @cache none
  * @flags sideEffecting idempotencyRequired
  */
 

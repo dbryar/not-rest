@@ -403,9 +403,10 @@ describe("v1:patron.get", () => {
         itemId: string;
         title: string;
         creator: string;
+        type: string;
         checkoutDate: string;
         dueDate: string;
-        daysLate: number;
+        daysOverdue: number;
       }>;
       totalOverdue: number;
       activeReservations: number;
@@ -439,8 +440,9 @@ describe("v1:patron.get", () => {
       expect(typeof item.creator).toBe("string");
       expect(typeof item.checkoutDate).toBe("string");
       expect(typeof item.dueDate).toBe("string");
-      expect(typeof item.daysLate).toBe("number");
-      expect(item.daysLate as number).toBeGreaterThan(0);
+      expect(typeof item.type).toBe("string");
+      expect(typeof item.daysOverdue).toBe("number");
+      expect(item.daysOverdue as number).toBeGreaterThan(0);
     }
   });
 });

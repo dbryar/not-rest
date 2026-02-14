@@ -4,14 +4,14 @@
 
 Build a convincing **demo application** that implements the **OpenCALL v1.0** spec as a working system. The demo domain is a **public lending library** — patrons browse a catalog of physical items (books, CDs, DVDs, board games), view item details, retrieve cover images, return overdue items, reserve items for pickup, and generate lending-history reports.
 
-The demo is split across four subdomains:
+The demo is split across four services (see **Environments** section for local vs remote URLs):
 
-| Domain                    | Purpose                                       | Hosting                                         |
-| ------------------------- | --------------------------------------------- | ----------------------------------------------- |
-| `www.opencall-api.com`    | Brochure/marketing site — explains the spec   | Firebase Hosting (static)                       |
-| `app.opencall-api.com`    | Demo app — interactive library dashboard      | Cloud Run (Bun, serves HTML + handles sessions) |
-| `api.opencall-api.com`    | OpenCALL API server — the spec implementation | Cloud Run (Bun, pure API)                       |
-| `agents.opencall-api.com` | Agent instructions — markdown for LLMs        | Firebase Hosting (static)                       |
+| Service | Purpose                                       | Remote domain             |
+| ------- | --------------------------------------------- | ------------------------- |
+| WWW     | Brochure/marketing site — explains the spec   | `www.opencall-api.com`    |
+| App     | Demo app — interactive library dashboard      | `app.opencall-api.com`    |
+| API     | OpenCALL API server — the spec implementation | `api.opencall-api.com`    |
+| Agents  | Agent instructions — capability declaration   | `agents.opencall-api.com` |
 
 Four audiences:
 
@@ -34,8 +34,57 @@ Four audiences:
 
 - `GET /` — dashboard (requires auth, redirects to `/auth` if no session)
 - `GET /auth` — auth page (pick username, select scopes, mint token)
-- `POST /auth` — proxies to `api.opencall-api.com/auth`, stores token in server-side session, sets `sid` cookie
+- `POST /auth` — proxies to `${API_URL}/auth`, stores token in server-side session, sets `sid` cookie
 - `GET /logout` — clears session + cookie
+
+---
+
+## Environments
+
+All cross-service URLs are driven by environment variables, never hardcoded. The system runs in two modes:
+
+### Local development
+
+All four services run on `localhost` with different ports:
+
+| Service | Local URL               | Port |
+| ------- | ----------------------- | ---- |
+| API     | `http://localhost:3000` | 3000 |
+| App     | `http://localhost:3001` | 3001 |
+| WWW     | `http://localhost:3002` | 3002 |
+| Agents  | `http://localhost:3003` | 3003 |
+
+Start locally with `bun run dev` in each service directory (or a root-level script that starts all four).
+
+### Remote (production)
+
+| Service | Remote URL                        | Hosting          |
+| ------- | --------------------------------- | ---------------- |
+| API     | `https://api.opencall-api.com`    | Cloud Run        |
+| App     | `https://app.opencall-api.com`    | Cloud Run        |
+| WWW     | `https://www.opencall-api.com`    | Firebase Hosting |
+| Agents  | `https://agents.opencall-api.com` | Firebase Hosting |
+
+### URL resolution
+
+Every service that references another service uses environment variables to resolve URLs. No service hardcodes a domain name or port. The key variables:
+
+| Variable     | Used by     | Local default           | Remote value                      |
+| ------------ | ----------- | ----------------------- | --------------------------------- |
+| `API_URL`    | App, Agents | `http://localhost:3000` | `https://api.opencall-api.com`    |
+| `APP_URL`    | WWW, API    | `http://localhost:3001` | `https://app.opencall-api.com`    |
+| `WWW_URL`    | App         | `http://localhost:3002` | `https://www.opencall-api.com`    |
+| `AGENTS_URL` | App         | `http://localhost:3003` | `https://agents.opencall-api.com` |
+
+These variables are used everywhere a cross-service URL appears:
+
+- The app's client JS calls `${API_URL}/call` directly (with CORS)
+- The app's `<meta>` tag and headers point to `${AGENTS_URL}/`
+- The brochure CTA links to `${APP_URL}`
+- The agent instructions reference `${API_URL}/auth/agent` and `${API_URL}/call`
+- The envelope viewer shows `${API_URL}/call` as the request URL (matches Network tab)
+
+The agent instructions markdown (`agents/index.md`) is a **template** — at build/serve time, `${API_URL}` placeholders are replaced with the actual value. Locally this means the agent instructions point to `http://localhost:3000`, which is correct for local testing.
 
 ---
 
@@ -129,10 +178,10 @@ demo/
 │
 ├── app/                               # === app.opencall-api.com ===
 │   ├── src/
-│   │   ├── server.ts                  # Bun.serve() entry point — serves HTML + API proxy
+│   │   ├── server.ts                  # Bun.serve() entry point — serves HTML + static files
 │   │   ├── session.ts                 # Session store (SQLite) + cookie handling
-│   │   ├── auth.ts                    # GET /auth page, POST /auth → mint + store session
-│   │   └── proxy.ts                   # Proxies /call etc. to api.opencall-api.com with token from session
+│   │   ├── auth.ts                    # GET /auth page, POST /auth → mint token, return to browser
+│   │   └── pages.ts                   # Page renderers (dashboard, catalog, account, etc.)
 │   ├── views/
 │   │   ├── layout.html                # Shell: nav, sidebar, main content area, patron badge top-right
 │   │   ├── auth.html                  # Auth page: username, scope checkboxes, mint button
@@ -176,19 +225,19 @@ The library lends physical items. Each item in the catalog has:
 
 ```typescript
 type CatalogItem = {
-  id: string // e.g. "book-978-0-14-028329-7"
-  type: "book" | "cd" | "dvd" | "boardgame"
-  title: string // e.g. "The Great Gatsby"
-  creator: string // author / artist / publisher
-  year: number // publication year
-  isbn?: string // ISBN for books
-  description: string // 1-2 sentence blurb
-  coverImageKey?: string // GCS object key for cover image
-  tags: string[] // e.g. ["fiction", "classic", "american"]
-  available: boolean // is a copy currently on the shelf
-  totalCopies: number // how many copies the library owns
-  availableCopies: number // how many are currently available
-}
+  id: string; // e.g. "book-978-0-14-028329-7"
+  type: "book" | "cd" | "dvd" | "boardgame";
+  title: string; // e.g. "The Great Gatsby"
+  creator: string; // author / artist / publisher
+  year: number; // publication year
+  isbn?: string; // ISBN for books
+  description: string; // 1-2 sentence blurb
+  coverImageKey?: string; // GCS object key for cover image
+  tags: string[]; // e.g. ["fiction", "classic", "american"]
+  available: boolean; // is a copy currently on the shelf
+  totalCopies: number; // how many copies the library owns
+  availableCopies: number; // how many are currently available
+};
 ```
 
 ### Seed data
@@ -204,17 +253,17 @@ Each demo auth token is implicitly a "patron." When a token is minted, a patron 
 
 ```typescript
 type Patron = {
-  id: string // e.g. "patron-leaping-lizard"
-  username: string // matches the auth token username
-  name: string // display name (faker-generated at seed, or username for demo users)
-  cardNumber: string // 10-digit library card number, e.g. "2810-4429-73"
-  createdAt: string // ISO 8601 datetime
-}
+  id: string; // e.g. "patron-leaping-lizard"
+  username: string; // matches the auth token username
+  name: string; // display name (faker-generated at seed, or username for demo users)
+  cardNumber: string; // 10-digit library card number, e.g. "2810-4429-73"
+  createdAt: string; // ISO 8601 datetime
+};
 ```
 
-**Library card numbers** are assigned to every patron at creation time. The format is `XXXX-XXXX-XX` (10 digits, hyphenated for readability). Pre-seeded patrons get stable card numbers. When a new patron is created via `POST /auth`, a new card number is generated and returned in the response.
+**Library card numbers** are assigned to every patron at creation time. The format is `XXXX-XXXX-ZZ` (8 numeric digits and 2 letters that should be a checksum, hyphenated for readability). Pre-seeded patrons get stable card numbers. When a new patron is created via `POST /auth`, a new card number is generated and returned in the response.
 
-**Card numbers for agents:** AI agents authenticate using a library card number (via `POST /auth/agent`). The human patron shares their card number with the agent — this is displayed prominently in the app dashboard (top-right corner, alongside the patron's name). The agent then uses this card number to get a token scoped specifically for agent operations.
+**Card numbers for agents:** AI agents authenticate using a library card number (via `POST /auth/agent`). The human patron shares their card number with the agent — this is displayed prominently in the app dashboard (bottom-left corner, alongside the patron's name). The agent then uses this card number to get a token scoped specifically for agent operations.
 
 **Key design choice:** When a demo user mints a token with username "leaping-lizard", they become patron "patron-leaping-lizard". The seed data pre-creates ~50 patrons with lending history. If a demo user happens to pick a seeded username, they inherit that patron's history (overdue items and all). If they pick a new username, a fresh patron is created — but **every new patron is seeded with at least 2 overdue items** so the reservation-blocked scenario works initially. This is the "scripted" part of the demo — but the patron CAN return overdue items to unblock reservations.
 
@@ -224,17 +273,17 @@ Generated by faker at seed time. Stored in SQLite. ~5,000 rows across ~50 pre-se
 
 ```typescript
 type LendingRecord = {
-  id: string
-  itemId: string
-  patronId: string // e.g. "patron-leaping-lizard"
-  patronName: string // faker full name or username
-  checkoutDate: string // ISO 8601 date
-  dueDate: string // 14 days after checkout
-  returnDate: string | null // null if still out
-  daysLate: number // 0 if returned on time or early
-  reservedDate: string | null // date a hold was placed, if any
-  collectionDelayDays: number | null // days between "ready for pickup" and actual collection
-}
+  id: string;
+  itemId: string;
+  patronId: string; // e.g. "patron-leaping-lizard"
+  patronName: string; // faker full name or username
+  checkoutDate: string; // ISO 8601 date
+  dueDate: string; // 14 days after checkout
+  returnDate: string | null; // null if still out
+  daysLate: number; // 0 if returned on time or early
+  reservedDate: string | null; // date a hold was placed, if any
+  collectionDelayDays: number | null; // days between "ready for pickup" and actual collection
+};
 ```
 
 **Overdue item seeding:** Every patron (pre-seeded and newly created) has at least 2 items checked out past their due date with `returnDate = null` and `daysLate > 0`. This ensures the `v1:item.reserve` → `OVERDUE_ITEMS_EXIST` scenario fires initially. The overdue items are real catalog items so the agent can look them up. However, patrons can return items via `v1:item.return` to clear their overdue status and then successfully reserve.
@@ -243,15 +292,15 @@ type LendingRecord = {
 
 ```typescript
 type Reservation = {
-  id: string
-  itemId: string
-  patronId: string
-  status: "pending" | "ready" | "collected" | "cancelled"
-  reservedAt: string // ISO 8601 datetime
-  readyAt: string | null // when the item became available for pickup
-  collectedAt: string | null // when the patron collected it
-  cancelledAt: string | null // if cancelled
-}
+  id: string;
+  itemId: string;
+  patronId: string;
+  status: "pending" | "ready" | "collected" | "cancelled";
+  reservedAt: string; // ISO 8601 datetime
+  readyAt: string | null; // when the item became available for pickup
+  collectedAt: string | null; // when the patron collected it
+  cancelledAt: string | null; // if cancelled
+};
 ```
 
 Reservations are created by `v1:item.reserve`. In the demo, reservations will initially fail due to overdue items. The patron (or agent acting on their behalf) can return items via `v1:item.return` to clear their overdue status, then successfully reserve.
@@ -269,84 +318,96 @@ Each operation is annotated with a compact set of JSDoc tags. The registry is ge
  * Human-readable description of the operation.
  *
  * @op v1:namespace.operationName
- * @flags sync|async cacheable? idempotent? mutating?
+ * @execution sync|async
+ * @timeout 5s
+ * @ttl 1h
  * @security scope1 scope2
- * @timeout 200ms|5s
- * @ttl 1h|30m|0
  * @cache none|server|location
- * @deprecated Use v1:other.op instead
+ * @flags sideEffecting? idempotencyRequired? deprecated?
  * @sunset 2026-06-01
  * @replacement v1:other.op
  */
 ```
 
-**`@flags`** — space-separated tokens. First token is the execution model (`sync`, `async`, `stream`). Remaining tokens are boolean flags — present means true, absent means false:
+**`@execution`** — the execution model: `sync`, `async`, or `stream`. Determines whether the operation returns immediately or uses polling.
 
-- `cacheable` → maps to `sideEffecting: false` (inverse logic: cacheable means NOT side-effecting)
-- `mutating` → maps to `sideEffecting: true`
-- `idempotent` → maps to `idempotencyRequired: true`
+**`@flags`** — space-separated boolean flags. Present means true, absent means false:
+
+- `sideEffecting` → maps to `sideEffecting: true` in registry (mutating operations)
+- `idempotencyRequired` → maps to `idempotencyRequired: true` (safe to retry)
+- `deprecated` → marks the operation as deprecated in the registry
 
 **`@security`** — space-separated scope names. AND logic: caller must have ALL listed scopes. Maps to `authScopes` in the registry.
 
-**`@timeout`** — human-readable duration. Maps to `maxSyncMs` in the registry (`200ms` → `200`, `5s` → `5000`).
+**`@timeout`** — milliseconds as a number. Maps to `maxSyncMs` in the registry.
 
-**`@ttl`** — human-readable duration. Maps to `ttlSeconds` in the registry (`1h` → `3600`, `30m` → `1800`, `0` → `0`).
+**`@ttl`** — seconds as a number. Maps to `ttlSeconds` in the registry.
 
 **`@cache`** — caching policy. Maps directly to `cachingPolicy` in the registry.
 
 ### JSDoc → Registry field mapping
 
-| JSDoc tag             | Registry field        | Parsing                                                  |
-| --------------------- | --------------------- | -------------------------------------------------------- |
-| `@op`                 | `op`                  | Direct string                                            |
-| `@flags` (1st)        | `executionModel`      | First token: `sync`, `async`, or `stream`                |
-| `@flags` `cacheable`  | `sideEffecting`       | `false` (inverse: cacheable = not side-effecting)        |
-| `@flags` `mutating`   | `sideEffecting`       | `true`                                                   |
-| `@flags` `idempotent` | `idempotencyRequired` | `true`                                                   |
-| `@security`           | `authScopes`          | Split on space → string array                            |
-| `@timeout`            | `maxSyncMs`           | Parse duration: `200ms` → `200`, `5s` → `5000`           |
-| `@ttl`                | `ttlSeconds`          | Parse duration: `1h` → `3600`, `30m` → `1800`, `0` → `0` |
-| `@cache`              | `cachingPolicy`       | Direct string: `none`, `server`, or `location`           |
-| `@deprecated`         | `deprecated`          | Tag presence → `true`                                    |
-| `@sunset`             | `sunset`              | ISO date string                                          |
-| `@replacement`        | `replacement`         | Op name string                                           |
+| JSDoc tag                    | Registry field        | Parsing                                              |
+| ---------------------------- | --------------------- | ---------------------------------------------------- |
+| `@op`                        | `op`                  | Direct string                                        |
+| `@execution`                 | `executionModel`      | `sync`, `async`, or `stream`                         |
+| `@flags sideEffecting`       | `sideEffecting`       | `true` if present                                    |
+| `@flags idempotencyRequired` | `idempotencyRequired` | `true` if present                                    |
+| `@flags deprecated`          | `deprecated`          | `true` if present                                    |
+| `@security`                  | `authScopes`          | Split on space → string array                        |
+| `@timeout`                   | `maxSyncMs`           | Duration string → ms: `5s` → `5000`, `200ms` → `200` |
+| `@ttl`                       | `ttlSeconds`          | Duration string → sec: `1h` → `3600`, `5m` → `300`   |
+| `@cache`                     | `cachingPolicy`       | Direct string: `none`, `server`, `location`          |
+| `@sunset`                    | `sunset`              | ISO date string                                      |
+| `@replacement`               | `replacement`         | Op name string                                       |
 
-If neither `cacheable` nor `mutating` appears in `@flags`, `sideEffecting` defaults to `false`. If `idempotent` is absent, `idempotencyRequired` defaults to `false`.
+Duration parsing uses [dayjs](https://day.js.org/) with the duration plugin. Supported units: `ms`, `s`, `m`, `h`, `d`. Always include the unit — raw numbers are ambiguous.
+
+If `sideEffecting` is absent from `@flags`, it defaults to `false`. If `idempotencyRequired` is absent, it defaults to `false`.
 
 ### Schema inference from Zod
 
 Schemas are NOT in separate JSON files. Each operation module exports colocated Zod schemas (`args` and `result`):
 
 ```ts
-import { z } from "zod"
+import { z } from "zod";
 
 export const args = z.object({
-  type: z.enum(["book", "cd", "dvd", "boardgame"]).optional().describe("Filter by item type"),
-  search: z.string().optional().describe("Free-text search across title and creator"),
+  type: z
+    .enum(["book", "cd", "dvd", "boardgame"])
+    .optional()
+    .describe("Filter by item type"),
+  search: z
+    .string()
+    .optional()
+    .describe("Free-text search across title and creator"),
   available: z.boolean().optional().describe("Filter to only available items"),
   limit: z.number().int().min(1).max(100).default(20).describe("Page size"),
   offset: z.number().int().min(0).default(0).describe("Pagination offset"),
-})
+});
 
 export const result = z.object({
   items: z.array(CatalogItemSummary),
   total: z.number().int().describe("Total matching items"),
   limit: z.number().int(),
   offset: z.number().int(),
-})
+});
 
 /**
  * Lists catalog items with optional filtering and pagination.
  *
  * @op v1:catalog.list
- * @flags sync cacheable
- * @security items:browse
- * @timeout 200ms
+ * @execution sync
+ * @timeout 5s
  * @ttl 1h
+ * @security items:browse
  * @cache server
  */
-export async function v1CatalogList(input: z.infer<typeof args>, ctx: OpContext): Promise<z.infer<typeof result>> {
-  return catalogListService(input, ctx)
+export async function v1CatalogList(
+  input: z.infer<typeof args>,
+  ctx: OpContext,
+): Promise<z.infer<typeof result>> {
+  return catalogListService(input, ctx);
 }
 ```
 
@@ -364,18 +425,24 @@ This eliminates separate JSON Schema files entirely. The Zod schemas serve tripl
 
 ### `v1:catalog.list` — List catalog items
 
-`@flags sync cacheable` · `@security items:browse` · `@timeout 200ms` · `@ttl 1h` · `@cache server`
+`@execution sync` · `@security items:browse` · `@timeout 5s` · `@ttl 1h` · `@cache server`
 
 **Args (Zod):**
 
 ```ts
 export const args = z.object({
-  type: z.enum(["book", "cd", "dvd", "boardgame"]).optional().describe("Filter by item type"),
-  search: z.string().optional().describe("Free-text search across title and creator"),
+  type: z
+    .enum(["book", "cd", "dvd", "boardgame"])
+    .optional()
+    .describe("Filter by item type"),
+  search: z
+    .string()
+    .optional()
+    .describe("Free-text search across title and creator"),
   available: z.boolean().optional().describe("Filter to only available items"),
   limit: z.number().int().min(1).max(100).default(20).describe("Page size"),
   offset: z.number().int().min(0).default(0).describe("Pagination offset"),
-})
+});
 ```
 
 **Result (Zod):**
@@ -397,14 +464,14 @@ export const result = z.object({
   total: z.number().int().describe("Total matching items (for pagination)"),
   limit: z.number().int(),
   offset: z.number().int(),
-})
+});
 ```
 
 ---
 
 ### `v1:catalog.listLegacy` — Deprecated alias
 
-`@flags sync cacheable` · `@security items:browse` · `@timeout 200ms` · `@ttl 1h` · `@cache server` · `@deprecated Use v1:catalog.list instead` · `@sunset 2026-06-01` · `@replacement v1:catalog.list`
+`@execution sync` · `@security items:browse` · `@timeout 5s` · `@ttl 1h` · `@cache server` · `@flags deprecated` · `@sunset 2026-06-01` · `@replacement v1:catalog.list`
 
 Same args and result schemas as `v1:catalog.list`. The controller delegates directly to `v1:catalog.list`'s service function. Exists solely to demonstrate the deprecation lifecycle.
 
@@ -413,17 +480,20 @@ Same args and result schemas as `v1:catalog.list`. The controller delegates dire
  * Lists catalog items (legacy endpoint).
  *
  * @op v1:catalog.listLegacy
- * @flags sync cacheable
- * @security items:browse
- * @timeout 200ms
+ * @execution sync
+ * @timeout 5s
  * @ttl 1h
+ * @security items:browse
  * @cache server
- * @deprecated Use v1:catalog.list instead
+ * @flags deprecated
  * @sunset 2026-06-01
  * @replacement v1:catalog.list
  */
-export async function v1CatalogListLegacy(input: z.infer<typeof args>, ctx: OpContext): Promise<z.infer<typeof result>> {
-  return catalogListService(input, ctx)
+export async function v1CatalogListLegacy(
+  input: z.infer<typeof args>,
+  ctx: OpContext,
+): Promise<z.infer<typeof result>> {
+  return catalogListService(input, ctx);
 }
 ```
 
@@ -431,14 +501,14 @@ export async function v1CatalogListLegacy(input: z.infer<typeof args>, ctx: OpCo
 
 ### `v1:item.get` — Get item details
 
-`@flags sync cacheable` · `@security items:read` · `@timeout 200ms` · `@ttl 1h` · `@cache server`
+`@execution sync` · `@security items:read` · `@timeout 5s` · `@ttl 1h` · `@cache server`
 
 **Args (Zod):**
 
 ```ts
 export const args = z.object({
   itemId: z.string().describe("Catalog item ID"),
-})
+});
 ```
 
 **Result (Zod):** Full `CatalogItem` Zod schema (all fields from the domain model).
@@ -449,14 +519,14 @@ export const args = z.object({
 
 ### `v1:item.getMedia` — Get cover image URL
 
-`@flags sync cacheable` · `@security items:read` · `@timeout 200ms` · `@ttl 1h` · `@cache location`
+`@execution sync` · `@security items:read` · `@timeout 5s` · `@ttl 1h` · `@cache location`
 
 **Args (Zod):**
 
 ```ts
 export const args = z.object({
   itemId: z.string().describe("Catalog item ID"),
-})
+});
 ```
 
 **Response behavior:**
@@ -473,14 +543,14 @@ This operation demonstrates the `303` redirect pattern and the `location` respon
 
 ### `v1:item.return` — Return a checked-out item
 
-`@flags sync mutating idempotent` · `@security items:write` · `@timeout 500ms` · `@ttl 0` · `@cache none`
+`@execution sync` · `@security items:checkin` · `@timeout 5s` · `@ttl 0s` · `@cache none` · `@flags sideEffecting idempotencyRequired`
 
 **Args (Zod):**
 
 ```ts
 export const args = z.object({
   itemId: z.string().describe("Catalog item ID to return"),
-})
+});
 ```
 
 **Result (Zod):**
@@ -493,7 +563,7 @@ export const result = z.object({
   wasOverdue: z.boolean(),
   daysLate: z.number().int(),
   message: z.string(),
-})
+});
 ```
 
 **Behavior:** Marks the lending record as returned (`returnDate = now`, recalculates `daysLate`). Increments the item's `availableCopies`. If this was the patron's last overdue item, reservations become unblocked.
@@ -505,25 +575,27 @@ export const result = z.object({
 | `ITEM_NOT_FOUND`       | `itemId` doesn't exist                    | "No catalog item found with ID '{itemId}'." |
 | `ITEM_NOT_CHECKED_OUT` | Patron doesn't have this item checked out | "You do not have '{title}' checked out."    |
 
-**The demo narrative (updated):** This operation completes the interaction arc. Patrons start with overdue items, try to reserve, get blocked, check their overdue items, return them one by one, and can then successfully reserve. This demonstrates:
+**The demo narrative:** This operation requires `items:checkin`, which agents do not have. When an agent tries `v1:item.return`, it gets a **403 Insufficient Scopes** — the error clearly identifies `items:checkin` as the missing scope. This forces the agent to tell the human: "I can't return books for you — you'll need to return them yourself, then I can reserve." The human returns books via the app's `/account` page (which has the scope), then tells the agent to retry the reservation.
 
-1. Domain errors with actionable messages that guide the caller
-2. Cross-operation business rules (reserve depends on overdue status)
-3. State mutation that affects subsequent operations
-4. How an agent navigates a multi-step workflow with failures and recovery
+This demonstrates:
+
+1. Scope enforcement with clear, actionable error messages
+2. Human-agent collaboration — the agent hits a physical-world boundary
+3. State mutation (via the human) that affects subsequent agent operations
+4. Domain errors with actionable messages that guide the caller
 
 ---
 
 ### `v1:item.reserve` — Reserve a catalog item for pickup
 
-`@flags sync mutating idempotent` · `@security items:write` · `@timeout 500ms` · `@ttl 0` · `@cache none`
+`@execution sync` · `@security items:write` · `@timeout 5s` · `@ttl 0s` · `@cache none` · `@flags sideEffecting idempotencyRequired`
 
 **Args (Zod):**
 
 ```ts
 export const args = z.object({
   itemId: z.string().describe("Catalog item ID to reserve"),
-})
+});
 ```
 
 **Result (Zod):**
@@ -536,7 +608,7 @@ export const result = z.object({
   status: z.literal("pending"),
   reservedAt: z.string().datetime(),
   message: z.string(),
-})
+});
 ```
 
 **Domain errors (HTTP 200 with `state=error`):**
@@ -548,25 +620,30 @@ export const result = z.object({
 | `ITEM_NOT_AVAILABLE`  | Item exists but `availableCopies` = 0                  | "'{title}' has no copies currently available for reservation."                                                                             |
 | `ALREADY_RESERVED`    | Patron already has an active reservation for this item | "You already have an active reservation for '{title}'."                                                                                    |
 
-**The demo narrative:** This operation is initially designed to fail. Every patron starts with overdue items, so the first `v1:item.reserve` call returns `OVERDUE_ITEMS_EXIST`. The error message explicitly tells the caller to check `v1:patron.get` — this guides both human users and AI agents into the next step of the interaction. Unlike previous iterations, the patron CAN now return overdue items via `v1:item.return`, then successfully reserve.
+**The demo narrative:** This operation is initially designed to fail. Every patron starts with overdue items, so the first `v1:item.reserve` call returns `OVERDUE_ITEMS_EXIST`. The error message tells the caller to check `v1:patron.get` — this guides both human users and AI agents into the next step of the interaction.
 
 An agent encountering this will naturally:
 
-1. Try `v1:item.reserve` → get `OVERDUE_ITEMS_EXIST`
+1. Try `v1:item.reserve` → get `OVERDUE_ITEMS_EXIST` (domain error, HTTP 200)
 2. Call `v1:patron.get` → see the overdue items
-3. Return the overdue items one by one via `v1:item.return`
-4. Retry `v1:item.reserve` → success
+3. Try `v1:item.return` → get **403 Insufficient Scopes** (missing `items:checkin`)
+4. Realize it cannot physically return books → tell the human to return them
+5. Human returns books via the app's `/account` page
+6. Human tells the agent the books are returned
+7. Agent retries `v1:item.reserve` → success
+
+This arc demonstrates three layers of the protocol in sequence: a domain error (business rule), a scope error (authorization boundary), and finally success — all discovered by the agent through protocol signals alone.
 
 ---
 
 ### `v1:patron.get` — Get current patron details including overdue items
 
-`@flags sync cacheable` · `@security patron:read` · `@timeout 200ms` · `@ttl 0` · `@cache none`
+`@execution sync` · `@security patron:read` · `@timeout 5s` · `@ttl 0s` · `@cache none`
 
 **Args (Zod):**
 
 ```ts
-export const args = z.object({})
+export const args = z.object({});
 ```
 
 No args — the patron is derived from the auth token. The token's username maps to a patron ID.
@@ -589,9 +666,15 @@ export const result = z.object({
     }),
   ),
   totalOverdue: z.number().int(),
-  activeReservations: z.number().int().describe("Number of active reservations"),
-  totalCheckedOut: z.number().int().describe("Total items currently checked out"),
-})
+  activeReservations: z
+    .number()
+    .int()
+    .describe("Number of active reservations"),
+  totalCheckedOut: z
+    .number()
+    .int()
+    .describe("Total items currently checked out"),
+});
 ```
 
 **Behavior:** Always returns at least 2 overdue items for any new patron (see seed data design). This is intentional — it sets up the `v1:item.reserve` rejection scenario initially. The patron can clear overdue items by returning them via `v1:item.return`.
@@ -600,7 +683,7 @@ export const result = z.object({
 
 ### `v1:patron.history` — Get lending history for the current patron
 
-`@flags sync cacheable` · `@security patron:read` · `@timeout 200ms` · `@ttl 5m` · `@cache server`
+`@execution sync` · `@security patron:read` · `@timeout 5s` · `@ttl 5m` · `@cache server`
 
 **Args (Zod):**
 
@@ -608,8 +691,11 @@ export const result = z.object({
 export const args = z.object({
   limit: z.number().int().min(1).max(100).default(20).describe("Page size"),
   offset: z.number().int().min(0).default(0).describe("Pagination offset"),
-  status: z.enum(["active", "returned", "overdue"]).optional().describe("Filter by lending status"),
-})
+  status: z
+    .enum(["active", "returned", "overdue"])
+    .optional()
+    .describe("Filter by lending status"),
+});
 ```
 
 **Result (Zod):**
@@ -633,21 +719,21 @@ export const result = z.object({
   total: z.number().int(),
   limit: z.number().int(),
   offset: z.number().int(),
-})
+});
 ```
 
 ---
 
 ### `v1:patron.fines` — Get outstanding fines for the current patron
 
-`@flags sync cacheable` · `@security patron:billing` · `@timeout 200ms` · `@ttl 0` · `@cache none`
+`@execution sync` · `@security patron:billing` · `@timeout 5s` · `@ttl 0s` · `@cache none`
 
 **This operation exists to demonstrate `403 Insufficient Scopes`.** The `patron:billing` scope is never granted to demo users or agents. Any call to this operation will return a `403` with a clear error envelope explaining which scope is missing.
 
 **Args (Zod):**
 
 ```ts
-export const args = z.object({})
+export const args = z.object({});
 ```
 
 **Result (Zod):** (never reached in demo)
@@ -665,14 +751,14 @@ export const result = z.object({
     }),
   ),
   totalOwed: z.number().describe("Total outstanding fines in dollars"),
-})
+});
 ```
 
 ---
 
 ### `v1:catalog.bulkImport` — Bulk import catalog items
 
-`@flags async mutating` · `@security items:manage` · `@timeout 5s` · `@ttl 1h` · `@cache none`
+`@execution async` · `@security items:manage` · `@timeout 30s` · `@ttl 1h` · `@cache none` · `@flags sideEffecting`
 
 **This operation exists to demonstrate `403 Insufficient Scopes`.** The `items:manage` scope is never granted to demo users or agents. Any call to this operation will return a `403` with a clear error envelope explaining which scope is missing. It also appears in the registry as an async, mutating operation — giving visitors a sense of the full range of operation types.
 
@@ -682,8 +768,14 @@ export const result = z.object({
 export const args = z.object({
   source: z.enum(["openlibrary", "csv"]).describe("Import source"),
   query: z.string().optional().describe("Search query for Open Library import"),
-  limit: z.number().int().min(1).max(500).default(50).describe("Maximum items to import"),
-})
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .default(50)
+    .describe("Maximum items to import"),
+});
 ```
 
 **Result (Zod):** (never reached in demo)
@@ -698,24 +790,31 @@ export const result = z.object({
       reason: z.string(),
     }),
   ),
-})
+});
 ```
 
 ---
 
 ### `v1:report.generate` — Generate lending history report
 
-`@flags async mutating idempotent` · `@security reports:generate` · `@timeout 5s` · `@ttl 1h` · `@cache none`
+`@execution async` · `@security reports:generate` · `@timeout 30s` · `@ttl 1h` · `@cache none` · `@flags sideEffecting idempotencyRequired`
 
 **Args (Zod):**
 
 ```ts
 export const args = z.object({
   format: z.enum(["csv", "json"]).default("csv").describe("Output format"),
-  itemType: z.enum(["book", "cd", "dvd", "boardgame"]).optional().describe("Filter by item type"),
-  dateFrom: z.string().date().optional().describe("Start date for report range"),
+  itemType: z
+    .enum(["book", "cd", "dvd", "boardgame"])
+    .optional()
+    .describe("Filter by item type"),
+  dateFrom: z
+    .string()
+    .date()
+    .optional()
+    .describe("Start date for report range"),
   dateTo: z.string().date().optional().describe("End date for report range"),
-})
+});
 ```
 
 **Result:** Not inline. The report is stored in GCS. On completion, the polling endpoint returns `state=complete` with a `location.uri` pointing to the GCS object and uses the chunking spec to deliver in pages of 100.
@@ -771,7 +870,14 @@ Request:
 ```json
 {
   "username": "leaping-lizard",
-  "scopes": ["items:browse", "items:read", "items:write", "patron:read", "reports:generate"]
+  "scopes": [
+    "items:browse",
+    "items:read",
+    "items:write",
+    "items:checkin",
+    "patron:read",
+    "reports:generate"
+  ]
 }
 ```
 
@@ -785,7 +891,14 @@ Response:
   "token": "demo_a1b2c3d4e5f6...",
   "username": "leaping-lizard",
   "cardNumber": "2810-4429-73",
-  "scopes": ["items:browse", "items:read", "items:write", "patron:read", "reports:generate"],
+  "scopes": [
+    "items:browse",
+    "items:read",
+    "items:write",
+    "items:checkin",
+    "patron:read",
+    "reports:generate"
+  ],
   "expiresAt": 1739368800
 }
 ```
@@ -811,11 +924,12 @@ Response:
   "patronId": "patron-leaping-lizard",
   "cardNumber": "2810-4429-73",
   "scopes": ["items:browse", "items:read", "items:write", "patron:read"],
+  // Note: no "items:checkin" — agents cannot return physical items
   "expiresAt": 1739368800
 }
 ```
 
-Agent tokens are always prefixed with `agent_` (vs `demo_` for human tokens). Agent tokens receive a fixed scope set: `items:browse`, `items:read`, `items:write`, `patron:read`. Agents cannot generate reports or access billing — they can browse the catalog, view item details, return items, and reserve items.
+Agent tokens are always prefixed with `agent_` (vs `demo_` for human tokens). Agent tokens receive a fixed scope set: `items:browse`, `items:read`, `items:write`, `patron:read`. Agents cannot return items (no `items:checkin` — a robot can't hand a physical book to a librarian), generate reports, or access billing. When an agent tries `v1:item.return`, it gets a 403 with the missing scope clearly identified.
 
 **Errors:**
 
@@ -840,20 +954,20 @@ The app is the human-facing frontend. It wraps the API token in a server-side se
 
 **Flow:**
 
-1. User visits `app.opencall-api.com/` (any page).
+1. User visits the App root (any page).
 2. App server checks for a `sid` cookie → looks up session in SQLite.
-3. **No valid session?** → redirect to `app.opencall-api.com/auth`.
+3. **No valid session?** → redirect to `/auth`.
 4. **Auth page** shows:
    - A generated username (or the one from their existing session if they're changing scopes)
    - Checkboxes for scopes (all default scopes checked — see Scopes table)
    - If they already have a session, their current scopes are shown as checked, and they can add/remove
    - A "Start Demo" button (or "Update Scopes" if already authed)
 5. User clicks the button → app `POST /auth` handler:
-   - POSTs to `api.opencall-api.com/auth` with `{ username, scopes }`
+   - POSTs to `${API_URL}/auth` with `{ username, scopes }`
    - Receives `{ token, username, cardNumber, scopes, expiresAt }`
    - Creates a server-side session in SQLite: `{ sid, token, username, cardNumber, scopes, expiresAt }`
    - Sets `sid` cookie (HttpOnly, Secure, SameSite=Lax, path=/)
-   - Redirects to `app.opencall-api.com/` (dashboard)
+   - Redirects to `/` (dashboard)
 6. **All subsequent requests:** App reads `sid` cookie → resolves session → uses the stored `token` in `Authorization: Bearer` header when calling the API.
 
 **Session store:** SQLite table `sessions` with columns `sid`, `token`, `username`, `card_number`, `scopes` (JSON), `expires_at`, `created_at`. Sessions expire when the underlying API token expires (24 hours).
@@ -862,21 +976,22 @@ The app is the human-facing frontend. It wraps the API token in a server-side se
 
 ### Scopes
 
-| Scope              | Grants access to                           | Default (human) | Agent |
-| ------------------ | ------------------------------------------ | --------------- | ----- |
-| `items:browse`     | `v1:catalog.list`, `v1:catalog.listLegacy` | Yes             | Yes   |
-| `items:read`       | `v1:item.get`, `v1:item.getMedia`          | Yes             | Yes   |
-| `items:write`      | `v1:item.reserve`, `v1:item.return`        | Yes             | Yes   |
-| `items:manage`     | `v1:catalog.bulkImport`                    | **No**          | No    |
-| `patron:read`      | `v1:patron.get`, `v1:patron.history`       | Yes             | Yes   |
-| `patron:billing`   | `v1:patron.fines`                          | **No**          | No    |
-| `reports:generate` | `v1:report.generate`                       | Yes             | No    |
+| Scope              | Grants access to                           | Default (human) | Agent  |
+| ------------------ | ------------------------------------------ | --------------- | ------ |
+| `items:browse`     | `v1:catalog.list`, `v1:catalog.listLegacy` | Yes             | Yes    |
+| `items:read`       | `v1:item.get`, `v1:item.getMedia`          | Yes             | Yes    |
+| `items:write`      | `v1:item.reserve`                          | Yes             | Yes    |
+| `items:checkin`    | `v1:item.return`                           | Yes             | **No** |
+| `items:manage`     | `v1:catalog.bulkImport`                    | **No**          | No     |
+| `patron:read`      | `v1:patron.get`, `v1:patron.history`       | Yes             | Yes    |
+| `patron:billing`   | `v1:patron.fines`                          | **No**          | No     |
+| `reports:generate` | `v1:report.generate`                       | Yes             | No     |
 
-**Human default set:** `items:browse`, `items:read`, `items:write`, `patron:read`, `reports:generate`. The user can uncheck any to test what happens when scopes are insufficient.
+**Human default set:** `items:browse`, `items:read`, `items:write`, `items:checkin`, `patron:read`, `reports:generate`. The user can uncheck any to test what happens when scopes are insufficient.
 
-**Agent fixed set:** `items:browse`, `items:read`, `items:write`, `patron:read`. Agents cannot generate reports (they'd need `reports:generate`) and nobody can access billing or bulk import.
+**Agent fixed set:** `items:browse`, `items:read`, `items:write`, `patron:read`. Agents cannot return items (no `items:checkin`), generate reports (no `reports:generate`), or access billing/bulk import. The missing `items:checkin` is intentional — it drives the demo's agent interaction arc (see below).
 
-**Scopes that always 403:** `items:manage` and `patron:billing` are never granted to any user or agent in the demo. Operations requiring these scopes exist in the registry (visible in `/.well-known/ops`) but always return `403` when called. This is intentional — it demonstrates scope enforcement and gives visitors operations to "try and fail" with.
+**Scopes that always 403:** `items:manage` and `patron:billing` are never granted to any user or agent. `items:checkin` is granted to humans but not agents — this creates the key demo scenario where the agent must ask the human to return overdue books before it can reserve.
 
 ### Scope changes
 
@@ -910,34 +1025,34 @@ The API server tracks usage metrics in a **separate set of tables that are NOT w
 
 ```typescript
 type AnalyticsVisitor = {
-  id: string // UUID
-  patronId: string | null // linked after auth, e.g. "patron-leaping-lizard"
-  cardNumber: string | null // library card number, if authed
-  username: string | null // patron username, if authed
-  userAgent: string // raw User-Agent header
-  ip: string // client IP (X-Forwarded-For on Cloud Run, or remote address)
-  referrer: string | null // Referer header on first auth request
-  pageViews: number // incremented on each proxied page request (app server)
-  apiCalls: number // incremented on each POST /call
-  createdAt: string // ISO 8601 — first auth
-  updatedAt: string // ISO 8601 — last activity (updated on every request)
-}
+  id: string; // UUID
+  patronId: string | null; // linked after auth, e.g. "patron-leaping-lizard"
+  cardNumber: string | null; // library card number, if authed
+  username: string | null; // patron username, if authed
+  userAgent: string; // raw User-Agent header
+  ip: string; // client IP (X-Forwarded-For on Cloud Run, or remote address)
+  referrer: string | null; // Referer header on first auth request
+  pageViews: number; // incremented on each proxied page request (app server)
+  apiCalls: number; // incremented on each POST /call
+  createdAt: string; // ISO 8601 — first auth
+  updatedAt: string; // ISO 8601 — last activity (updated on every request)
+};
 ```
 
 **Agents** — one row per agent token:
 
 ```typescript
 type AnalyticsAgent = {
-  id: string // UUID
-  visitorId: string // FK → analytics_visitors.id (linked via card number at agent auth time)
-  patronId: string // the patron this agent acts as
-  cardNumber: string // the card number used to authenticate
-  userAgent: string // raw User-Agent header from the agent's auth request
-  ip: string // client IP
-  apiCalls: number // incremented on each POST /call made with this agent token
-  createdAt: string // ISO 8601 — agent token minted
-  updatedAt: string // ISO 8601 — last agent API call
-}
+  id: string; // UUID
+  visitorId: string; // FK → analytics_visitors.id (linked via card number at agent auth time)
+  patronId: string; // the patron this agent acts as
+  cardNumber: string; // the card number used to authenticate
+  userAgent: string; // raw User-Agent header from the agent's auth request
+  ip: string; // client IP
+  apiCalls: number; // incremented on each POST /call made with this agent token
+  createdAt: string; // ISO 8601 — agent token minted
+  updatedAt: string; // ISO 8601 — last agent API call
+};
 ```
 
 ### How data is captured
@@ -1091,13 +1206,13 @@ A static single-page site hosted on Firebase Hosting. This is the marketing/expl
 - XKCD 927 (Standards) comic in the hero slot — links to https://xkcd.com/927/. ATTRIBUTE CREATOR!!
 - Tagline: "Yes, we know. But hear us out."
 - One-sentence description: "OpenCALL is an API specification that serves humans and AI agents through one endpoint, one envelope, one contract."
-- **CTA button: "Try the Demo" → `app.opencall-api.com`**
+- **CTA button: "Try the Demo" → `${APP_URL}`**
 
 ### Sections (scrollable)
 
 1. **The problem** — condensed from README.md "The Problem" section
 2. **The answer** — `POST /call` example, condensed from README.md
-3. **Try it** — CTA to the demo app + curl examples against `api.opencall-api.com`
+3. **Try it** — CTA to the demo app + curl examples against `${API_URL}`
 4. **Compare** — summary table from comparisons.md (JSON-RPC, GraphQL, gRPC, SOAP, MCP, A2A) with link to full comparisons doc on GitHub
 5. **Read the spec** — link to specification.md on GitHub
 6. **Read the client guide** — link to client.md on GitHub ("Your REST SDK is apology code")
@@ -1188,7 +1303,7 @@ Clicking the badge navigates to `/account`.
 - "Change Scopes" link back to `/auth`
 - Summary: what operations are available (pulled from registry)
 - **Overdue warning banner** — if patron has overdue items, show a banner: "You have {n} overdue items" with a link to `/account`
-- **Agent instructions callout** — brief note: "Want to try with an AI agent? Share your library card number (`2810-4429-73`) and point the agent to `agents.opencall-api.com`"
+- **Agent instructions callout** — brief note: "Want to try with an AI agent? Share your library card number (`2810-4429-73`) and point the agent to `${AGENTS_URL}`"
 
 **`/catalog`** — Catalog browser
 
@@ -1242,199 +1357,240 @@ Clicking the badge navigates to `/account`.
 - No dedicated `/forbidden` page — this happens naturally anywhere a scope is missing
 - The `v1:patron.fines` and `v1:catalog.bulkImport` operations are shown in the registry but always 403
 
-### Envelope viewer behavior
+### Envelope viewer: data model
 
-- **Collapsible/expandable** — can be collapsed to focus on the UI, or expanded to fill more space
-- **Request tab / Response tab** — or stacked vertically
-- **Timing** — shows response time in ms
-- **HTTP status** — shown prominently (200, 202, 303, 400, 403, etc.)
-- **Auto-scroll** — for async operations, new polling responses append below
-- **Syntax highlighting** — JSON keys, strings, numbers in different colors
-- **Copy button** — copy the full request or response as curl command or JSON
+The client maintains two in-memory stores that drive the envelope viewer. Both are reset on page navigation (each page starts fresh).
+
+**`requests` — `Map<number, RequestEntry>`** keyed by timestamp (ms since epoch) for chronological sorting:
+
+```typescript
+type RequestEntry = {
+  timestamp: number; // Date.now() when the request was sent — also the Map key
+  requestId: string; // from the response (links to responses Map)
+  op: string; // e.g. "v1:catalog.list"
+  method: string; // "POST"
+  url: string; // "${API_URL}/call" (masked token in headers)
+  headers: Record<string, string>;
+  body: {
+    op: string;
+    args: Record<string, unknown>;
+    ctx?: { requestId: string; sessionId?: string };
+  };
+};
+```
+
+**`responses` — `Map<string, ResponseEntry[]>`** keyed by `requestId`, storing an **array** of responses per request (captures the full async polling chain):
+
+```typescript
+type ResponseEntry = {
+  timestamp: number; // when this response was received
+  status: number; // HTTP status (200, 202, 303, 400, 403, etc.)
+  headers: Record<string, string>;
+  body: {
+    requestId: string;
+    sessionId?: string;
+    state: "complete" | "accepted" | "pending" | "error";
+    result?: unknown;
+    error?: unknown;
+    location?: unknown;
+    retryAfterMs?: number;
+    expiresAt?: number;
+  };
+  timeMs: number; // round-trip time for this response
+};
+```
+
+**Why arrays for responses:** A single request like `v1:report.generate` produces multiple responses — the initial `202 Accepted`, then polling responses with `state=pending`, then the final `state=complete`. Storing the full chain lets the viewer show the async lifecycle progression.
+
+**Clear button:** Calls `requests.clear()` and `responses.clear()`, then re-renders.
+
+### Envelope viewer: display
+
+The viewer renders as a **vertically stacked pair** below (or beside) the page UI:
+
+- **Top/left: Request list** — all entries from `requests`, sorted by timestamp (newest first or oldest first, user can toggle). Each row shows: timestamp, `op` name, HTTP status of latest response (color-coded).
+- **Bottom/right: Response chain** — when a request is selected, shows all entries from `responses.get(requestId)` in chronological order. For sync operations this is a single response. For async operations it's the full polling chain.
+- **Both visible simultaneously** when screen height allows — no tabs, no switching. If viewport is too short, the response panel scrolls independently.
+- **Collapsible** — the entire viewer can be collapsed to focus on the page UI.
+- **Syntax highlighting** — JSON keys, strings, numbers in different colors.
+- **HTTP status** — shown prominently on each response, color-coded (2xx green, 3xx blue, 4xx amber, 5xx red).
+- **Timing** — each response shows its round-trip time in ms.
+- **Copy button** — copy a request as a curl command, or a response as raw JSON.
 
 ### Client-side implementation
 
-The app's client-side JS (`app.js`) does NOT call the API directly from the browser. Instead:
+The app's client-side JS (`app.js`) calls the API **directly** from the browser. This is essential for demo authenticity — developers inspecting the Network tab must see real OpenCALL envelopes, not proxy wrappers.
 
-1. Browser calls `app.opencall-api.com/api/call` (same-origin proxy endpoint on the app server)
-2. App server reads the `sid` cookie → resolves session → gets the API token
-3. App server forwards the request to `api.opencall-api.com/call` with `Authorization: Bearer <token>`
-4. App server returns the response to the browser, including timing metadata
-5. Browser renders the UI result AND the raw request/response envelopes
+**Why direct calls matter:**
 
-This keeps the API token out of the browser entirely. The browser only has the `sid` session cookie.
+- Dev tools show the actual protocol traffic
+- Envelope viewer matches what's in Network tab (no smoke and mirrors)
+- Developers can copy/paste real requests
+- Demo credibility depends on showing the real thing
 
-For the envelope viewer, the app server returns both the proxied response AND the request it sent:
+**Token in browser:** The demo token is returned to the browser after auth. This is intentional:
 
-```json
-{
-  "request": {
-    "method": "POST",
-    "url": "https://api.opencall-api.com/call",
-    "headers": { "Authorization": "Bearer demo_***", "Content-Type": "application/json" },
-    "body": { "op": "v1:catalog.list", "args": { "type": "book" }, "ctx": { "requestId": "..." } }
-  },
-  "response": {
-    "status": 200,
-    "headers": { "Content-Type": "application/json" },
-    "body": { "requestId": "...", "state": "complete", "result": { ... } },
-    "timeMs": 142
+- Demo tokens are disposable (24hr expiry)
+- Prefixed with `demo_` (obviously not production credentials)
+- No real data in the demo
+- Production apps would use proper auth (OAuth, etc.)
+
+**Flow:**
+
+1. User authenticates via `/auth` → app server mints token via `${API_URL}/auth`
+2. App server returns token to browser (stored in JS variable)
+3. Browser calls `${API_URL}/call` directly with `Authorization: Bearer <token>`
+4. Browser receives **real OpenCALL envelope** — no wrapper
+5. Browser stores request/response in Maps and updates envelope viewer
+6. Dev tools Network tab shows the same envelope as the viewer
+
+**API call wrapper in app.js:**
+
+```javascript
+async function callAPI(op, args) {
+  const requestId = crypto.randomUUID();
+  const start = Date.now();
+
+  const response = await fetch(`${API_URL}/call`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      op,
+      args,
+      ctx: { requestId },
+    }),
+  });
+
+  const timeMs = Date.now() - start;
+  const body = await response.json();
+
+  // Store for envelope viewer
+  requests.set(Date.now(), {
+    timestamp: Date.now(),
+    requestId: body.requestId,
+    op,
+    method: "POST",
+    url: `${API_URL}/call`,
+    headers: {
+      Authorization: "Bearer ***",
+      "Content-Type": "application/json",
+    },
+    body: { op, args, ctx: { requestId } },
+  });
+
+  const responseEntry = {
+    timestamp: Date.now(),
+    status: response.status,
+    headers: Object.fromEntries(response.headers),
+    body, // ← REAL OpenCALL envelope
+    timeMs,
+  };
+
+  if (!responses.has(body.requestId)) {
+    responses.set(body.requestId, []);
   }
+  responses.get(body.requestId).push(responseEntry);
+
+  return body;
 }
 ```
 
-The bearer token value is masked in the viewer (`demo_***`) so it's visible as a concept but not copyable as a credential.
+The token is masked in the envelope viewer display (`Bearer ***`) but the actual request uses the real token. For async operations, the client auto-polls and appends each polling response to the same `requestId` entry in the `responses` Map.
+
+**CORS:** The API server allows requests from the app origin (`${APP_URL}`).
 
 ---
 
 ## Agent discovery: `agents.opencall-api.com`
 
-A single static markdown document served at the root. This is NOT an MCP server, not JSON, not a structured API — just plain text instructions that an LLM can read and follow.
+A single static markdown document served at the root. This is a **capability declaration** — it tells the agent what this service is, how to authenticate, and where to discover operations. It does NOT list operations, describe workflows, or prescribe behavior. The agent must discover everything else through the protocol itself.
+
+**Why this matters for the demo:** The entire point of OpenCALL is that it's self-describing. If the agent instructions pre-script the workflow, the demo proves nothing. The real proof is an agent that reads the registry, encounters domain errors, interprets the error messages, and figures out multi-step workflows autonomously — all from protocol signals alone.
 
 ### How agents find it
 
-The `app.opencall-api.com` HTML includes standard discovery hints:
+The App service includes standard discovery hints, using `${AGENTS_URL}` to resolve the correct URL:
 
 1. **`<meta>` tag in HTML `<head>`:**
 
    ```html
-   <meta name="ai-instructions" content="https://agents.opencall-api.com/" />
+   <meta name="ai-instructions" content="${AGENTS_URL}/" />
    ```
 
-2. **`X-AI-Instructions` response header** on all `app.opencall-api.com` responses:
+2. **`X-AI-Instructions` response header** on all App responses:
 
    ```
-   X-AI-Instructions: https://agents.opencall-api.com/
+   X-AI-Instructions: ${AGENTS_URL}/
    ```
 
-3. **`/.well-known/ai-instructions`** on `app.opencall-api.com` — redirects to `agents.opencall-api.com/`
+3. **`/.well-known/ai-instructions`** on the App — redirects to `${AGENTS_URL}/`
 
-4. **`robots.txt`** on `app.opencall-api.com`:
+4. **`robots.txt`** on the App:
    ```
-   # AI agents: see https://agents.opencall-api.com/ for API instructions
+   # AI agents: see ${AGENTS_URL}/ for API instructions
    User-agent: *
    Allow: /
    ```
 
 Any of these paths gets the agent to the instructions page. The exact standard for AI agent discovery is still emerging — we include multiple approaches to maximize compatibility.
 
-### Content of `agents.opencall-api.com/` (the markdown document)
+### Content of the agent instructions (served at Agents root)
+
+The markdown is a **template** — `{{API_URL}}` placeholders are replaced with the actual `API_URL` value at build/serve time. Locally this resolves to `http://localhost:3000`, remotely to `https://api.opencall-api.com`.
 
 ```markdown
-# OpenCALL Demo Library — Instructions for AI Agents
+# OpenCALL Demo Library — AI Agent Access
 
-You are interacting with a demo lending library powered by the OpenCALL API specification.
-This system lets you browse a catalog of books, CDs, DVDs, and board games, check patron
-account status, return overdue items, and reserve items for pickup — all through a single
-API endpoint.
+This is a public lending library. It uses the OpenCALL API specification.
 
-## Authentication — You Need a Library Card Number
+## Authentication
 
-Before you can do anything, you need the patron's **library card number**. This is a
-10-digit number in the format `XXXX-XXXX-XX` (e.g. `2810-4429-73`).
+You need the patron's library card number to act on their behalf. Ask them for it —
+it's a 10-digit number in the format `XXXX-XXXX-XX`.
 
-**Ask the user for their library card number.** They can find it in the top-right corner
-of the app dashboard at `app.opencall-api.com`.
+    POST {{API_URL}}/auth/agent
+    Content-Type: application/json
 
-Once you have the card number, get a token:
+    { "cardNumber": "<patron-card-number>" }
 
-POST https://api.opencall-api.com/auth/agent
-Content-Type: application/json
+The response includes a `token`. Use it as a bearer token on all subsequent requests:
 
-{
-"cardNumber": "2810-4429-73"
-}
+    Authorization: Bearer <token>
 
-The response will include a `token` field. Use it in all subsequent requests:
+## API
 
-Authorization: Bearer <token>
+All operations use a single endpoint:
 
-You will receive a fixed set of scopes: `items:browse`, `items:read`, `items:write`,
-and `patron:read`. These let you browse the catalog, view item details, return items,
-and reserve items.
+    POST {{API_URL}}/call
+    Content-Type: application/json
+    Authorization: Bearer <token>
 
-## Calling operations
+    { "op": "<operation-name>", "args": { ... } }
 
-All operations go through a single endpoint:
+Responses use a standard envelope with a `state` field (`complete`, `accepted`,
+`pending`, or `error`). Read the `state` to determine what happened.
 
-POST https://api.opencall-api.com/call
-Content-Type: application/json
-Authorization: Bearer <your-token>
+## Discovery
 
-{
-"op": "v1:catalog.list",
-"args": { "type": "book", "limit": 10 }
-}
+Discover all available operations, their schemas, and constraints:
 
-The response is a JSON envelope with a `state` field:
+    GET {{API_URL}}/.well-known/ops
 
-- `state: "complete"` — the result is in the `result` field
-- `state: "accepted"` or `"pending"` — poll the URL in `location.uri`
-- `state: "error"` — the error is in the `error` field (this is a domain error, not a failure)
-
-## Discovering available operations
-
-GET https://api.opencall-api.com/.well-known/ops
-
-This returns the full operation registry with schemas, execution models, and constraints.
-Read this to understand what operations are available and what arguments they accept.
-
-## Available operations (your scopes)
-
-With your agent scopes, you can use:
-
-- `v1:catalog.list` — Browse the catalog. Filter by type, search, availability.
-- `v1:item.get` — Get full details for a catalog item by ID.
-- `v1:item.getMedia` — Get a cover image URL for a catalog item.
-- `v1:item.return` — Return a checked-out item. Clears overdue status.
-- `v1:item.reserve` — Reserve a catalog item for pickup. Will fail if the patron
-  has overdue items — return them first.
-- `v1:patron.get` — Check the patron's account: overdue items, card number, checked-out
-  items. No arguments needed — identity comes from your token.
-- `v1:patron.history` — Get the patron's lending history with pagination and filters.
-
-You will NOT have access to:
-
-- `v1:report.generate` (requires `reports:generate`)
-- `v1:patron.fines` (requires `patron:billing`)
-- `v1:catalog.bulkImport` (requires `items:manage`)
-
-## Common workflow
-
-1. Ask the user for their library card number
-2. Get a token (POST /auth/agent with the card number)
-3. Check the patron's account (v1:patron.get) — note any overdue items
-4. Browse the catalog (v1:catalog.list)
-5. Get details on an item (v1:item.get)
-6. If the patron wants to reserve an item:
-   a. Check for overdue items first (v1:patron.get)
-   b. If overdue items exist, return them (v1:item.return for each)
-   c. Then reserve the desired item (v1:item.reserve)
-7. Report results back to the user
-
-## Important notes
-
-- This is a demo. The catalog contains ~200 items with synthetic data.
-- New patrons start with overdue items. This is by design — it demonstrates how the API
-  communicates business rules through domain errors.
-- The patron CAN return overdue items via v1:item.return. Once all overdue items are
-  returned, reservations will succeed.
-- Domain errors (like "overdue items exist") come back as HTTP 200 with state: "error".
-  This is different from protocol errors (400, 401, 403) which indicate a problem with
-  the request itself, not with the business logic.
-- Some operations in the registry (v1:patron.fines, v1:catalog.bulkImport) require scopes
-  you don't have. If you try to call them, you'll get a 403 with a clear error message
-  about which scope is missing.
+This registry is the authoritative source for what you can do, what arguments each
+operation accepts, and what it returns. Start here.
 ```
 
 ### Key design decisions
 
-- **Library card number as agent entry point.** The agent must ask the user for their card number before doing anything. This creates a realistic interaction pattern (like a librarian asking "Can I see your library card?") and ties the agent's actions to a specific patron.
-- **Fixed agent scopes.** Agents get `items:browse`, `items:read`, `items:write`, `patron:read` — enough to browse, return items, and reserve, but not to generate reports or access billing. This is deliberate scoping.
-- **Plain markdown, not structured JSON or YAML.** LLMs are better at reading natural language instructions than parsing structured configs. The document is written conversationally, like you'd explain the API to a colleague.
-- **Includes the full auth flow.** An agent shouldn't need to figure out authentication by trial and error. The instructions tell it exactly how to get a token and where to use it.
-- **Points to `/.well-known/ops` for schemas.** The instructions give a summary of operations but direct the agent to the registry for the authoritative schemas. This means the instructions don't go stale when operations change.
-- **Describes the "scripted" scenario.** The agent is told upfront that overdue items exist and how to handle them. This isn't a secret — it's the demo narrative. The agent should handle it gracefully, not be surprised by it.
+- **Capability declaration, not a script.** The agent instructions contain only what the agent cannot discover from the protocol: the auth mechanism (which is outside the spec), the base URL, and the existence of `/.well-known/ops`. Everything else — operations, schemas, error handling, multi-step workflows — must be discovered through the protocol. This is what the demo proves.
+- **No operation listing.** The instructions do not list available operations. The agent reads `/.well-known/ops` to discover them. If the registry is well-designed, the agent doesn't need a cheat sheet.
+- **No workflow scripting.** The instructions do not describe the overdue→return→reserve workflow. The agent encounters `OVERDUE_ITEMS_EXIST` as a domain error (HTTP 200, `state=error`) with a message like "You have 2 overdue item(s). Use v1:patron.get to see details." The agent follows the error's guidance — that's the protocol working as designed.
+- **No scope pre-declaration.** The instructions do not tell the agent which scopes it has or which operations will 403. The agent discovers its permissions by reading the registry (which lists required scopes per operation) and by encountering 403 responses with clear error messages listing the missing scope.
+- **Library card number as agent entry point.** The agent must ask the user for their card number before doing anything. This is the one piece of out-of-band information the agent needs. It creates a realistic interaction pattern (like a librarian asking "Can I see your library card?") and ties the agent's actions to a specific patron.
+- **The demo's proof point.** A well-designed agent hitting this service should: (1) read the registry, (2) understand what operations exist and what they require, (3) call operations, (4) interpret domain errors and follow their guidance, (5) navigate multi-step workflows without prior knowledge. If this works, it proves OpenCALL's self-describing design is sufficient for autonomous agent interaction — no MCP server, no custom integration, no scripted behavior.
 - **No "on behalf of" semantics.** The agent's token IS the patron (via card number lookup). The agent acts as that patron directly.
 
 ---
@@ -1446,21 +1602,27 @@ You will NOT have access to:
 One machine definition, instantiated per async operation. Sync operations do not use XState — they execute inline and return immediately.
 
 ```typescript
-import { setup, assign } from "xstate"
+import { setup, assign } from "xstate";
 
 const operationMachine = setup({
   types: {
     context: {} as {
-      requestId: string
-      sessionId: string | undefined
-      op: string
-      args: Record<string, unknown>
-      createdAt: number // Unix epoch seconds
-      expiresAt: number // Unix epoch seconds
-      resultLocation: string | null // GCS key, set on completion
-      error: { code: string; message: string; cause?: unknown } | null
+      requestId: string;
+      sessionId: string | undefined;
+      op: string;
+      args: Record<string, unknown>;
+      createdAt: number; // Unix epoch seconds
+      expiresAt: number; // Unix epoch seconds
+      resultLocation: string | null; // GCS key, set on completion
+      error: { code: string; message: string; cause?: unknown } | null;
     },
-    events: {} as { type: "START" } | { type: "COMPLETE"; resultLocation: string } | { type: "FAIL"; error: { code: string; message: string; cause?: unknown } },
+    events: {} as
+      | { type: "START" }
+      | { type: "COMPLETE"; resultLocation: string }
+      | {
+          type: "FAIL";
+          error: { code: string; message: string; cause?: unknown };
+        },
   },
 }).createMachine({
   id: "operation",
@@ -1479,7 +1641,9 @@ const operationMachine = setup({
       on: {
         COMPLETE: {
           target: "complete",
-          actions: assign({ resultLocation: ({ event }) => event.resultLocation }),
+          actions: assign({
+            resultLocation: ({ event }) => event.resultLocation,
+          }),
         },
         FAIL: {
           target: "error",
@@ -1490,7 +1654,7 @@ const operationMachine = setup({
     complete: { type: "final" },
     error: { type: "final" },
   },
-})
+});
 ```
 
 ### State persistence
@@ -1515,7 +1679,7 @@ At boot time, the registry is generated by:
 1. Scanning all `.ts` files in `src/operations/`
 2. Importing each module → reads `args` and `result` Zod schema exports
 3. Calls `z.toJSONSchema()` (Zod v4 native) to convert to JSON Schema for the registry
-4. Parses JSDoc from the exported `execute` function for metadata tags (`@op`, `@flags`, `@security`, `@timeout`, `@ttl`, `@cache`, `@deprecated`, `@sunset`, `@replacement`)
+4. Parses JSDoc from the exported `execute` function for metadata tags (`@op`, `@execution`, `@flags`, `@security`, `@timeout`, `@ttl`, `@cache`, `@sunset`, `@replacement`)
 5. Assembles the registry object: `{ callVersion, operations }`
 6. Caches the result in memory (rebuilt on restart)
 
@@ -1588,39 +1752,62 @@ gcloud run deploy opencall-api \
   --source ./api \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars GCS_BUCKET=opencall-demo-library
+  --set-env-vars GCS_BUCKET=opencall-demo-library,APP_URL=https://app.opencall-api.com
 
 # App server (Cloud Run)
 gcloud run deploy opencall-app \
   --source ./app \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars API_URL=https://api.opencall-api.com
+  --set-env-vars API_URL=https://api.opencall-api.com,AGENTS_URL=https://agents.opencall-api.com,WWW_URL=https://www.opencall-api.com
 
-# Brochure site + agent instructions (Firebase)
+# Brochure site (Firebase) — APP_URL baked at build time
+APP_URL=https://app.opencall-api.com bun run build
 cd www && firebase deploy --only hosting
+
+# Agent instructions (Firebase) — API_URL baked at build time
+API_URL=https://api.opencall-api.com bun run build
 cd ../agents && firebase deploy --only hosting
 ```
 
 ### Environment variables
 
-**API (`api.opencall-api.com`):**
+Cross-service URL variables (`API_URL`, `APP_URL`, `WWW_URL`, `AGENTS_URL`) are defined in the **Environments** section above. The tables below list service-specific variables only.
+
+**API:**
 
 | Var             | Description                                     |
 | --------------- | ----------------------------------------------- |
+| `APP_URL`       | App service URL (for CORS, redirects)           |
 | `GCS_BUCKET`    | GCS bucket name for media/reports               |
 | `PORT`          | Server port (default 3000, Cloud Run sets 8080) |
 | `DATABASE_PATH` | SQLite file path (default `./library.db`)       |
 | `ADMIN_SECRET`  | Shared secret for `POST /admin/reset`           |
 
-**App (`app.opencall-api.com`):**
+**App:**
 
-| Var               | Description                                                       |
-| ----------------- | ----------------------------------------------------------------- |
-| `API_URL`         | Base URL for the API server (e.g. `https://api.opencall-api.com`) |
-| `PORT`            | Server port (default 3000, Cloud Run sets 8080)                   |
-| `SESSION_DB_PATH` | SQLite file path for sessions (default `./sessions.db`)           |
-| `COOKIE_SECRET`   | Secret for signing `sid` cookies                                  |
+| Var               | Description                                             |
+| ----------------- | ------------------------------------------------------- |
+| `API_URL`         | API service URL (passed to browser for direct calls)    |
+| `AGENTS_URL`      | Agents service URL (for discovery headers/meta tags)    |
+| `WWW_URL`         | WWW service URL (for nav links)                         |
+| `PORT`            | Server port (default 3001, Cloud Run sets 8080)         |
+| `SESSION_DB_PATH` | SQLite file path for sessions (default `./sessions.db`) |
+| `COOKIE_SECRET`   | Secret for signing `sid` cookies                        |
+
+**WWW:**
+
+| Var       | Description                              |
+| --------- | ---------------------------------------- |
+| `APP_URL` | App service URL (for "Try the Demo" CTA) |
+| `PORT`    | Server port (default 3002)               |
+
+**Agents:**
+
+| Var       | Description                                         |
+| --------- | --------------------------------------------------- |
+| `API_URL` | API service URL (templated into agent instructions) |
+| `PORT`    | Server port (default 3003)                          |
 
 ---
 
@@ -1633,7 +1820,7 @@ cd ../agents && firebase deploy --only hosting
 - Rate limiting algorithm
 - Exact XState actor management code
 - Test case specifications
-- App proxy implementation details
+- CORS configuration for browser-to-API calls
 - Envelope viewer component design (exact HTML/CSS/JS)
 - Agent discovery standard selection (which `<meta>` / header / well-known convention wins)
 - CI/CD pipeline

@@ -15,7 +15,7 @@ import { listItems } from "../services/catalog.ts";
  */
 
 export const args = z.object({
-  type: z.string().optional(),
+  type: z.enum(["book", "cd", "dvd", "boardgame"]).optional().describe("Filter by item type"),
   search: z.string().optional(),
   available: z.boolean().optional(),
   limit: z.int().min(1).max(100).optional().default(20),

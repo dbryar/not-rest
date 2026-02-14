@@ -86,13 +86,14 @@ export function getOverdueItems(
   itemId: string;
   title: string;
   creator: string;
+  type: string;
   checkoutDate: string;
   dueDate: string;
-  daysLate: number;
+  daysOverdue: number;
 }> {
   const rows = db
     .prepare(
-      `SELECT lh.id, lh.item_id, lh.checkout_date, lh.due_date, ci.title, ci.creator
+      `SELECT lh.id, lh.item_id, lh.checkout_date, lh.due_date, ci.title, ci.creator, ci.type
        FROM lending_history lh
        JOIN catalog_items ci ON ci.id = lh.item_id
        WHERE lh.patron_id = ? AND lh.return_date IS NULL AND lh.due_date < date('now')`
@@ -104,16 +105,17 @@ export function getOverdueItems(
   return rows.map((row) => {
     const dueDate = new Date(row.due_date as string);
     const diffMs = now.getTime() - dueDate.getTime();
-    const daysLate = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    const daysOverdue = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
     return {
       lendingId: row.id as string,
       itemId: row.item_id as string,
       title: row.title as string,
       creator: row.creator as string,
+      type: row.type as string,
       checkoutDate: row.checkout_date as string,
       dueDate: row.due_date as string,
-      daysLate,
+      daysOverdue,
     };
   });
 }

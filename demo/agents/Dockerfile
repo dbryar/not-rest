@@ -3,6 +3,5 @@ WORKDIR /app
 COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile --production
 COPY . .
-EXPOSE 3000
-ENV APP_PORT=3000
+EXPOSE 3003
 CMD ["bun", "run", "src/server.ts"]

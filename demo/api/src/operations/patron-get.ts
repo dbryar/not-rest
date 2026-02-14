@@ -29,7 +29,8 @@ export const result = z.object({
       creator: z.string(),
       checkoutDate: z.string(),
       dueDate: z.string(),
-      daysLate: z.number(),
+      type: z.string(),
+      daysOverdue: z.number(),
     })
   ),
   totalOverdue: z.number(),
