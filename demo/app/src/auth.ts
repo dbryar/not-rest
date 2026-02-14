@@ -1,4 +1,4 @@
-import { createSession, getSession, deleteSession, type Session } from "./session.ts";
+import { createSession, resolveSession as verifySession, type Session } from "./session.ts";
 import { proxyAuth } from "./proxy.ts";
 
 const AGENTS_URL = process.env.AGENTS_URL || "http://localhost:8888";
@@ -18,18 +18,19 @@ export function parseCookies(cookieHeader: string | null): Record<string, string
   return cookies;
 }
 
+const COOKIE_NAME = "session";
+
 /**
  * Build a Set-Cookie header string for the session cookie.
  */
-function buildSessionCookie(sid: string, maxAge: number): string {
+function buildSessionCookie(value: string, maxAge: number): string {
   const parts = [
-    `sid=${sid}`,
+    `${COOKIE_NAME}=${value}`,
     `Path=/`,
     `HttpOnly`,
     `SameSite=Lax`,
     `Max-Age=${maxAge}`,
   ];
-  // Only add Secure in production (when not localhost)
   if (process.env.NODE_ENV === "production") {
     parts.push("Secure");
   }
@@ -40,7 +41,7 @@ function buildSessionCookie(sid: string, maxAge: number): string {
  * Build a Set-Cookie header string that clears the session cookie.
  */
 function buildClearCookie(): string {
-  return "sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
 /**
@@ -48,9 +49,9 @@ function buildClearCookie(): string {
  */
 export function resolveSession(req: Request): Session | null {
   const cookies = parseCookies(req.headers.get("Cookie"));
-  const sid = cookies["sid"];
-  if (!sid) return null;
-  return getSession(sid);
+  const cookieValue = cookies[COOKIE_NAME];
+  if (!cookieValue) return null;
+  return verifySession(cookieValue);
 }
 
 /**
@@ -248,8 +249,8 @@ export async function handleAuthSubmit(req: Request): Promise<Response> {
     expiresAt: number;
   };
 
-  // Create server-side session (needed for page rendering)
-  const session = createSession({
+  // Create signed session cookie (stateless — no DB needed)
+  const cookieValue = createSession({
     token: authData.token,
     username: authData.username,
     cardNumber: authData.cardNumber,
@@ -273,7 +274,7 @@ export async function handleAuthSubmit(req: Request): Promise<Response> {
       status: 200,
       headers: {
         "Content-Type": "application/json",
-        "Set-Cookie": buildSessionCookie(session.sid, maxAge),
+        "Set-Cookie": buildSessionCookie(cookieValue, maxAge),
       },
     });
   }
@@ -283,21 +284,15 @@ export async function handleAuthSubmit(req: Request): Promise<Response> {
     status: 302,
     headers: {
       Location: "/",
-      "Set-Cookie": buildSessionCookie(session.sid, maxAge),
+      "Set-Cookie": buildSessionCookie(cookieValue, maxAge),
     },
   });
 }
 
 /**
- * Handle GET /logout - Delete session and redirect to auth page.
+ * Handle GET /logout - Clear session cookie and redirect to auth page.
  */
 export function handleLogout(req: Request): Response {
-  const cookies = parseCookies(req.headers.get("Cookie"));
-  const sid = cookies["sid"];
-  if (sid) {
-    deleteSession(sid);
-  }
-
   return new Response(null, {
     status: 302,
     headers: {

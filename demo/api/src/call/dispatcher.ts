@@ -124,7 +124,7 @@ export async function dispatch(
   }
 
   // 5. Authenticate
-  const authResult = authenticate(request, db);
+  const authResult = authenticate(request);
   if (isAuthError(authResult)) {
     // Preserve requestId/sessionId in auth error responses
     authResult.body.requestId = requestId;

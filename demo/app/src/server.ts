@@ -1,6 +1,4 @@
-import { getDb } from "./db/connection.ts";
 import { resolveSession, handleAuthPage, handleAuthSubmit, handleLogout } from "./auth.ts";
-import { clearAllSessions } from "./session.ts";
 import { renderDashboard, renderCatalog, renderItem, renderAccount, renderReports } from "./pages.ts";
 import { join, dirname } from "node:path";
 import type { Session } from "./session.ts";
@@ -81,9 +79,6 @@ function requireSession(req: Request): { session: Session } | { redirect: Respon
 }
 
 export function startServer() {
-  // Initialize the session database on startup
-  getDb();
-
   const port = parseInt(process.env.PORT || process.env.APP_PORT || "8000", 10);
 
   const server = Bun.serve({
@@ -168,9 +163,8 @@ Allow: /
       // ── Admin routes ──────────────────────────────────────────────
 
       if (path === "/api/reset" && request.method === "POST") {
-        // Clear all app sessions when the API is reset
-        clearAllSessions();
-        return jsonResponse({ message: "App sessions cleared" });
+        // Sessions are now stateless signed cookies — nothing to clear server-side
+        return jsonResponse({ message: "OK" });
       }
 
       // ── Authenticated page routes ─────────────────────────────────

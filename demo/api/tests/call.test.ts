@@ -207,11 +207,16 @@ describe("v1:catalog.listLegacy — 410 sunset", () => {
   });
 
   test("returns 410 OP_REMOVED after sunset date with replacement in cause", async () => {
-    // Create a token with a far-future expiry so it survives our Date.now mock
-    const { getDb } = await import("../src/db/connection.ts");
-    const db = getDb();
-    const farFutureExpiry = "2027-01-01T00:00:00.000Z";
-    db.prepare("UPDATE auth_tokens SET expires_at = ? WHERE token = ?").run(farFutureExpiry, token);
+    // Mint a token with a far-future expiry so it survives our Date.now mock
+    const { signToken } = await import("../src/auth/tokens.ts");
+    const farFutureToken = signToken({
+      tokenType: "demo",
+      username: "test-user",
+      patronId: crypto.randomUUID(),
+      scopes: ["items:browse", "items:read"],
+      expiresAt: Math.floor(new Date("2027-01-01T00:00:00Z").getTime() / 1000),
+    });
+    token = farFutureToken;
 
     // Mock Date.now to return a date after 2026-06-01
     const realDateNow = Date.now;

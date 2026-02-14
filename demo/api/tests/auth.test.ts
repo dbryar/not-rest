@@ -27,9 +27,9 @@ describe("POST /auth", () => {
     expect(body).toHaveProperty("expiresAt");
   });
 
-  test("token starts with 'demo_'", async () => {
+  test("token is a signed token (base64url.base64url format)", async () => {
     const res = await authenticate();
-    expect(res.body.token).toMatch(/^demo_/);
+    expect(res.body.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
   });
 
   test("generated username follows adjective-animal format when not provided", async () => {
@@ -77,9 +77,9 @@ describe("POST /auth/agent", () => {
     expect(body.cardNumber).toBe(seedCardNumber);
   });
 
-  test("agent token starts with 'agent_'", async () => {
+  test("agent token is a signed token (base64url.base64url format)", async () => {
     const res = await authenticateAgent(seedCardNumber);
-    expect(res.body.token).toMatch(/^agent_/);
+    expect(res.body.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
   });
 
   test("agent token carries fixed scopes (NO items:checkin)", async () => {

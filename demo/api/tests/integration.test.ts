@@ -35,7 +35,7 @@ describe("Full Demo Workflow", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.token).toMatch(/^demo_/);
+    expect(body.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(body.cardNumber).toBeDefined();
 
     humanToken = body.token;
@@ -114,7 +114,7 @@ describe("Full Demo Workflow", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.token).toMatch(/^agent_/);
+    expect(body.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(body.scopes).not.toContain("items:checkin");
 
     agentToken = body.token;
@@ -240,7 +240,7 @@ describe("Test User Integration", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.token).toMatch(/^agent_/);
+    expect(body.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(body.cardNumber).toBe(TEST_CARD_NUMBER);
     expect(body.username).toBe("test-patron");
   });

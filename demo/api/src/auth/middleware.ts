@@ -1,5 +1,4 @@
-import type { Database } from "bun:sqlite";
-import { lookupToken } from "./tokens.ts";
+import { verifyToken } from "./tokens.ts";
 import { protocolError } from "../call/errors.ts";
 
 /** Context derived from a successfully authenticated request */
@@ -16,13 +15,12 @@ export interface OpContext {
 
 /**
  * Authenticate a request by extracting the Bearer token from the Authorization
- * header, looking it up in the database, and verifying it has not expired.
+ * header, verifying its HMAC signature, and checking expiry.
  *
  * Returns an OpContext on success, or a protocol error response on failure.
  */
 export function authenticate(
   request: Request,
-  db: Database
 ): OpContext | { status: number; body: import("../call/envelope.ts").ResponseEnvelope } {
   const authHeader = request.headers.get("Authorization");
 
@@ -44,21 +42,12 @@ export function authenticate(
   }
 
   const tokenString = match[1];
-  const token = lookupToken(db, tokenString);
+  const token = verifyToken(tokenString);
 
   if (!token) {
     return protocolError(
       "AUTH_REQUIRED",
-      "Invalid or unknown token",
-      401
-    );
-  }
-
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  if (token.expiresAt <= nowSeconds) {
-    return protocolError(
-      "AUTH_REQUIRED",
-      "Token has expired",
+      "Invalid or expired token",
       401
     );
   }

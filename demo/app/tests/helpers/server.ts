@@ -34,6 +34,7 @@ export async function startServers(): Promise<void> {
 
   // 2. Start the App server with API_URL pointing to the test API server
   process.env.API_URL = API_BASE;
+  delete process.env.PORT; // Clear so the app reads APP_PORT instead
   process.env.APP_PORT = String(APP_PORT);
   const { startServer: startApp } = await import("../../src/server.ts");
   appServer = startApp();
@@ -52,10 +53,7 @@ export async function stopServers(): Promise<void> {
     apiServer = null;
   }
 
-  // Close databases
-  const { closeDb: closeAppDb } = await import("../../src/db/connection.ts");
-  closeAppDb();
-
+  // Close API database
   const { closeDb: closeApiDb } = await import("../../../api/src/db/connection.ts");
   closeApiDb();
 }
@@ -135,7 +133,7 @@ export function parseSetCookie(header: string): {
 
 /**
  * Authenticate through the app flow: submit form, extract session cookie,
- * return the sid cookie string for subsequent requests.
+ * return the session cookie string for subsequent requests.
  */
 export async function appLogin(opts?: {
   username?: string;
@@ -145,8 +143,8 @@ export async function appLogin(opts?: {
   const setCookie = res.headers.get("Set-Cookie");
   if (!setCookie) throw new Error("No Set-Cookie header from POST /auth");
   const parsed = parseSetCookie(setCookie);
-  if (parsed.name !== "sid") throw new Error(`Expected cookie name 'sid', got '${parsed.name}'`);
-  return { sid: parsed.value, cookie: `sid=${parsed.value}` };
+  if (parsed.name !== "session") throw new Error(`Expected cookie name 'session', got '${parsed.name}'`);
+  return { sid: parsed.value, cookie: `session=${parsed.value}` };
 }
 
 // ── API test data seeder ───────────────────────────────────────────────

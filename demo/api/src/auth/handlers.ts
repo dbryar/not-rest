@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { mintToken, storeToken, tokenExpiresAt } from "./tokens.ts";
+import { signToken, tokenExpiresAt } from "./tokens.ts";
 import { DEFAULT_HUMAN_SCOPES, AGENT_SCOPES, stripNeverGranted } from "./scopes.ts";
 import { upsertVisitor, linkAgent } from "../services/analytics.ts";
 
@@ -132,19 +132,15 @@ export async function handleHumanAuth(request: Request, db: Database): Promise<R
   // Track visitor (fire-and-forget, never throws)
   const analyticsId = upsertVisitor(patronId, cardNumber, username, ip, userAgent);
 
-  // Mint and store token
-  const token = mintToken("demo");
+  // Mint signed token (stateless — no DB storage needed)
   const expiresAt = tokenExpiresAt();
-
-  storeToken(db, {
-    token,
+  const token = signToken({
     tokenType: "demo",
     username,
     patronId,
     scopes,
     analyticsId,
     expiresAt,
-    createdAt: new Date().toISOString(),
   });
 
   return new Response(
@@ -205,20 +201,16 @@ export async function handleAgentAuth(request: Request, db: Database): Promise<R
   // Link agent to visitor (fire-and-forget, never throws)
   const analyticsId = linkAgent(patron.id, patron.card_number, ip, userAgent);
 
-  // Mint agent token
+  // Mint signed agent token (stateless — no DB storage needed)
   const scopes = [...AGENT_SCOPES];
-  const token = mintToken("agent");
   const expiresAt = tokenExpiresAt();
-
-  storeToken(db, {
-    token,
+  const token = signToken({
     tokenType: "agent",
     username: patron.username,
     patronId: patron.id,
     scopes,
     analyticsId,
     expiresAt,
-    createdAt: new Date().toISOString(),
   });
 
   return new Response(
