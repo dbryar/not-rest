@@ -1,0 +1,11 @@
+{
+  "name": "opencall-demo-agents",
+  "version": "1.0.0",
+  "description": "Agent instructions service for OpenCALL Demo Library",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/server.ts",
+    "start": "bun run src/server.ts"
+  },
+  "dependencies": {}
+}

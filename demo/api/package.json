@@ -1,0 +1,24 @@
+{
+  "name": "@opencall-demo/api",
+  "version": "1.0.0",
+  "module": "src/server.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "test": "bun test",
+    "seed": "bun run src/db/seed.ts",
+    "reset": "bun run src/db/reset.ts"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.15.0",
+    "zod": "^3.25.0",
+    "xstate": "^5.19.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

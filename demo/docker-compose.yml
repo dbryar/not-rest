@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - APP_URL=http://localhost:3000
+      - ADMIN_SECRET=demo-admin-secret
+    volumes:
+      - api-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/.well-known/ops"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - APP_PORT=3000
+      - API_URL=http://api:8080
+    depends_on:
+      api:
+        condition: service_healthy
+
+  www:
+    build:
+      context: ./www
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - APP_URL=http://app:3000
+      - API_URL=http://api:8080
+
+  agents:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - API_URL=http://api:8080
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  api-data:

@@ -314,7 +314,7 @@ The system MUST return a descriptive payload whenever possible.
 | 404    | Resource not found — the requested operation result, chunk, or media object does not exist or has expired.                                                             |
 | 405    | Method not allowed — the HTTP method is not supported for the requested endpoint.                                                                                      |
 | 410    | Operation removed — the operation existed but has been removed (past its sunset date). The error payload includes `replacement` if a successor exists.                 |
-| 429    | Too many requests — the caller is polling too frequently or has exceeded a reasonable rate limit. The `retryAfterMs` field indicates how long to wait before retrying. |
+| 429    | Too many requests — the caller is polling too frequently. The `retryAfterMs` field indicates how long to wait before retrying. See note below.                        |
 | 500    | Internal failure with full error payload.                                                                                                                              |
 | 502    | Upstream dependency failure.                                                                                                                                           |
 | 503    | Service unavailable.                                                                                                                                                   |
@@ -331,6 +331,7 @@ The system MUST return a descriptive payload whenever possible.
 - 404 responses on `/ops/{requestId}` or `/ops/{requestId}/chunks` indicate the operation instance has expired past its TTL or never existed. Callers should not retry.
 - HTTP 500 responses MUST include a full error payload and any panic/error code.
 - 410 responses indicate that a deprecated operation has been removed past its sunset date. The error payload MUST include the `OP_REMOVED` code and SHOULD include the `replacement` operation name if one exists.
+- <a id="429-scope"></a>**429 scope:** The `429 Too Many Requests` status is defined principally for **polling** — when a caller polls `GET /ops/{requestId}` too frequently, the server returns 429 with `retryAfterMs` to throttle the cadence. It does **not** apply to chunked result retrieval (`GET /ops/{requestId}/chunks`), which is a sequential pull-based data transfer, not a retry loop. Implementers MAY additionally apply broader rate limiting to `POST /call` or other endpoints to prevent abuse, but this is an operational concern outside the protocol — the spec does not prescribe it.
 - **Zero-information responses are forbidden.** _"There was a problem, that's all we know"_ is **not acceptable**. If the server doesn't know what went wrong, it should say so in the error message rather than leaving the caller in the dark.
   Should infrastructure errors occur or a pre-filter (e.g. WAF rule, transport layer auth failure, etc.) be triggered before the request reaches the application, a generic response with no body is acceptable since the request never made it to the API.
 
@@ -372,7 +373,7 @@ GET /ops/{requestId}
 
 Returns the canonical response envelope.
 
-The controller may implement rate limiting and return `429 Too Many Requests` if the caller exceeds a reasonable polling cadence. The `retryAfterMs` field in the response indicates how long the caller should wait before polling again.
+The controller may implement rate limiting and return `429 Too Many Requests` if the caller exceeds a reasonable polling cadence. The `retryAfterMs` field in the response indicates how long the caller should wait before polling again. See [429 Scope](#429-scope) for details on where rate limiting applies.
 
 ---
 
